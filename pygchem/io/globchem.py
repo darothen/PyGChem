@@ -22,7 +22,19 @@ defined in the :module:`pygchem.glochem` module.
 
 External dependencies: fortranformat, sqlite3
 """
+from __future__ import unicode_literals
+from __future__ import print_function
+from __future__ import division
+from __future__ import absolute_import
 
+from future import standard_library
+standard_library.install_aliases()
+from builtins import *
+from builtins import filter
+from builtins import str
+from builtins import zip
+from builtins import range
+from past.builtins import basestring
 import os
 import collections
 
@@ -102,7 +114,7 @@ def read_globchem_dat(filename):
         species_item['init_concentration'] = [float(i) for i in
                                             species_item['init_concentration']]
         mb_vals = [int(i) for i in species_item['mb_groups']]
-        species_item['mb_groups'] = dict(zip(mb_groups.keys(), mb_vals))
+        species_item['mb_groups'] = dict(list(zip(list(mb_groups.keys()), mb_vals)))
 
     def trim_rlist(reac_list):
         """
@@ -111,7 +123,7 @@ def read_globchem_dat(filename):
         """
         # filter below permits to take only items that are not '' (if string)
         # or 0 (if int or float) because bool('') and bool(0) both return False
-        return filter(bool, reac_list)
+        return list(filter(bool, reac_list))
 
     def read_reac(globchem_file, fline):
         """
@@ -179,8 +191,8 @@ def read_globchem_dat(filename):
 
         # read reaction rate parameters
         n_addrates = reac_row1.pop(5)
-        reac_rates = dict(zip(reac_rates_keys,
-                              reac_row1[2:5] + reac_row1[6:9]))
+        reac_rates = dict(list(zip(reac_rates_keys,
+                              reac_row1[2:5] + reac_row1[6:9])))
         if(n_addrates > 0):
             for i in range(0, n_addrates):
                 new_keys = [s + str(i + 1) for s in reac_rates_keys]
@@ -188,13 +200,13 @@ def read_globchem_dat(filename):
                 fline += 1
                 reac_row2 = reac_r2_fmt.read(l_globchem)
                 del reac_row2[3]  # remove slot for number of rate coef lines
-                reac_rates.update(dict(zip(new_keys, reac_row2)))
+                reac_rates.update(dict(list(zip(new_keys, reac_row2))))
 
         # re-arrange rate parameters using corr_ratep
         reac_flag = reac_item[3].upper()
         mod_reac_rates = dict()
         if reac_flag in mod_ratep:
-            for k, v in mod_ratep[reac_flag].items():
+            for k, v in list(mod_ratep[reac_flag].items()):
                 if (isinstance(v, collections.Iterable)
                     and not isinstance(v, basestring)):
                     mod_reac_rates[k] = [reac_rates[n] for n in v]
@@ -216,8 +228,8 @@ def read_globchem_dat(filename):
         if(reac_eq[-2] is None):
             reac_eq[-2] = 0.0
 
-        reac_item.append(trim_rlist([reac_eq[i] for i in xrange(1, 13, 3)]))
-        reac_item.append(trim_rlist([reac_eq[i] for i in xrange(13, 61, 3)]))
+        reac_item.append(trim_rlist([reac_eq[i] for i in range(1, 13, 3)]))
+        reac_item.append(trim_rlist([reac_eq[i] for i in range(13, 61, 3)]))
         reac_item.append(trim_rlist([reac_eq[i] for i in range(12, 60, 3)]))
 
         return reac_item
@@ -236,7 +248,7 @@ def read_globchem_dat(filename):
         row = [s.strip() for s in row]
         species_info[row[0]] = row[1:]
     f_species_dat.close()
-    species_info_blank = ['' for s in xrange(0, len(species_info.keys()[0]))]
+    species_info_blank = ['' for s in range(0, len(list(species_info.keys())[0]))]
 
     # globchem.dat file
     globchem_file = open(filename, "r")
@@ -258,7 +270,7 @@ def read_globchem_dat(filename):
     l_globchem = globchem_file.readline()
     mb_st = sanatize_str_inlist(species_mb_st_fmt.read(l_globchem))
 
-    mb_groups = dict(zip(mb_id, mb_st))
+    mb_groups = dict(list(zip(mb_id, mb_st)))
     fline += 2
 
     species_r1_fmt = FortranRecordReader('(A1,1X,A14,A2,1X,0PF6.2,4(1PE10.3))')
@@ -278,7 +290,7 @@ def read_globchem_dat(filename):
         except KeyError:
             species_vals += species_info_blank
 
-        species[species_this_key] = dict(zip(species_keys, species_vals))
+        species[species_this_key] = dict(list(zip(species_keys, species_vals)))
         convert_species_item(species[species_this_key], mb_groups)
         del species_vals
         n_species += 1
@@ -301,7 +313,7 @@ def read_globchem_dat(filename):
             elif reac_flag == 'E':
                 reac_vals[5].update(mem_p_ratep)
 
-            reac_kn[n_reac] = dict(zip(reac_keys, reac_vals))
+            reac_kn[n_reac] = dict(list(zip(reac_keys, reac_vals)))
             reac_kn[n_reac]['id'] = n_reac
             n_reac += 1
         del reac_vals
@@ -313,14 +325,14 @@ def read_globchem_dat(filename):
         if(reac_vals == "end"):
             break
         else:
-            reac_ph[n_reac] = dict(zip(reac_keys, reac_vals))
+            reac_ph[n_reac] = dict(list(zip(reac_keys, reac_vals)))
             reac_ph[n_reac]['id'] = n_reac
             n_reac += 1
         del reac_vals
 
     # identify links between species (through reactions): parse reac_kn
     link_id = 0
-    for reac_key, reac_vals in reac_kn.iteritems():
+    for reac_key, reac_vals in list(reac_kn.items()):
         for reactant in reac_vals['reactants']:
             if(reactant != '' and reactant != 'M'):
                 for product in reac_vals['products']:

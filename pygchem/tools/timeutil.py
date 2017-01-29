@@ -10,7 +10,19 @@
 Miscellaneous routine(s) for time iterations and conversions.
 
 """
+from __future__ import division
+from __future__ import unicode_literals
+from __future__ import print_function
+from __future__ import absolute_import
 
+from future import standard_library
+standard_library.install_aliases()
+from builtins import *
+from builtins import zip
+from builtins import str
+from builtins import range
+from builtins import object
+from past.utils import old_div
 import datetime
 
 from dateutil import rrule
@@ -51,7 +63,7 @@ def time2tau(time, reference=CTM_TIME_REF_DT):
     Convert a datetime object into given hours since reference
     (default: 01.01.1985 00:00).
     """
-    return (time - reference).total_seconds() / 3600.0
+    return old_div((time - reference).total_seconds(), 3600.0)
 
 
 def strp_relativedelta(delta_t):
@@ -64,7 +76,7 @@ def strp_relativedelta(delta_t):
     keys = 'years', 'months', 'days', 'hours', 'minutes', 'seconds'
     vals = [int(i) for i in d.split('-')] + [int(i) for i in t.split(':')]
 
-    return relativedelta(**dict(zip(keys, vals)))
+    return relativedelta(**dict(list(zip(keys, vals))))
 
 
 class DatetimeSlicer(object):
@@ -158,7 +170,7 @@ class DatetimeSlicer(object):
                 except ValueError:
                     min_max = [int(v) for v in val.split(cls._str_range_sep)]
                     min_max[1] += 1
-                    dt_elem.extend(range(*min_max))
+                    dt_elem.extend(list(range(*min_max)))
             args.append(dt_elem)
         return args
 

@@ -10,7 +10,17 @@
 Interface to the Harvard-NASA Emissions Component (HEMCO).
 
 """
+from __future__ import unicode_literals
+from __future__ import print_function
+from __future__ import division
+from __future__ import absolute_import
 
+from future import standard_library
+standard_library.install_aliases()
+from builtins import *
+from builtins import str
+from builtins import range
+from builtins import object
 import os
 
 from pygchem import config
@@ -362,7 +372,7 @@ class EmissionSetup(object):
         """
         fids = self.get_fids()
         min_fid = min(i for i in fids if i is not None)
-        range_fids = range(min_fid, max(fids) + len(fids) + 1)
+        range_fids = list(range(min_fid, max(fids) + len(fids) + 1))
         duplicate_fids = set([fid for fid in fids if fids.count(fid) > 1])
         available_fids = sorted(set(range_fids) - set(fids))
 
@@ -379,7 +389,7 @@ class EmissionSetup(object):
 
         eids = self.get_eids()
         min_eid = min(i for i in eids if i is not None)
-        range_eids = range(min_eid, max(eids) + len(eids) + 1)
+        range_eids = list(range(min_eid, max(eids) + len(eids) + 1))
         duplicate_eids = set([eid for eid in eids if eids.count(eid) > 1])
         available_eids = sorted(set(range_eids) - set(eids))
 

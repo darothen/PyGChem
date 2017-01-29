@@ -11,7 +11,18 @@
 Read / write unformatted binary Fortran files.
 
 """
+from __future__ import division
+from __future__ import unicode_literals
+from __future__ import print_function
+from __future__ import absolute_import
 
+from future import standard_library
+standard_library.install_aliases()
+from builtins import *
+from builtins import zip
+from builtins import str
+from past.builtins import basestring
+from past.utils import old_div
 import struct
 
 
@@ -170,7 +181,7 @@ def _replace_star(fmt, size):
     if n_stars:
         i = fmt.find('*')
         s = struct.calcsize(fmt.replace(fmt[i:i + 2], ''))
-        n = (size - s) / struct.calcsize(fmt[i + 1])
+        n = old_div((size - s), struct.calcsize(fmt[i + 1]))
 
         fmt = fmt.replace('*', str(n))
 

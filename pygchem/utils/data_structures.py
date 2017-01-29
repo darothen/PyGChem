@@ -11,7 +11,19 @@ Custom, generic data structures.
 
 """
 from __future__ import print_function
+from __future__ import unicode_literals
+from __future__ import division
+from __future__ import absolute_import
 
+from builtins import *
+from future import standard_library
+standard_library.install_aliases()
+from builtins import map
+from builtins import str
+from builtins import zip
+from builtins import filter
+from builtins import range
+from builtins import object
 import sys
 import os
 import collections
@@ -21,7 +33,7 @@ from keyword import iskeyword
 from collections import OrderedDict
 from collections import Counter
 try:
-    from UserList import UserList
+    from collections import UserList
 except ImportError:
     from collections import UserList
 
@@ -242,13 +254,11 @@ class RecordList(UserList):
         selection = self.data
         for a in args:
             if not callable(a):
-                selection = filter(lambda obj: getattr(obj, self.key_attr) == a,
-                                   selection)
+                selection = [obj for obj in selection if getattr(obj, self.key_attr) == a]
             else:
-                selection = filter(a, selection)
-        for attr_name, attr_val in kwargs.items():
-            selection = filter(lambda obj: getattr(obj, attr_name) == attr_val,
-                               selection)
+                selection = list(filter(a, selection))
+        for attr_name, attr_val in list(kwargs.items()):
+            selection = [obj for obj in selection if getattr(obj, attr_name) == attr_val]
         return self._create_selection(selection)
 
     def select_one(self, *args, **kwargs):
@@ -306,9 +316,9 @@ class RecordList(UserList):
     def to_dict(self, ordered=False):
         """Return a (ordered) dictionary (`key_attr`: item) from this object."""
         if ordered:
-            return OrderedDict(zip(self.keys, self.data))
+            return OrderedDict(list(zip(self.keys, self.data)))
         else:
-            return dict(zip(self.keys, self.data))
+            return dict(list(zip(self.keys, self.data)))
 
     def insert(self, i, item):
         self._check_before_add(item)
@@ -474,8 +484,8 @@ class Record(object):
 
     def to_dict(self, ordered=False):
         """Return a new dict which maps field names to their values."""
-        kv_pairs = zip(self._properties,
-                       (getattr(self, k) for k in self._properties))
+        kv_pairs = list(zip(self._properties,
+                       (getattr(self, k) for k in self._properties)))
         if ordered:
             return OrderedDict(kv_pairs)
         else:
@@ -489,7 +499,7 @@ class Record(object):
         return len(self._properties)
 
     def __iter__(self):
-        return self.values()
+        return list(self.values())
 
     def __getitem__(self, key):
         return getattr(self, key)
@@ -516,7 +526,7 @@ class Record(object):
         vals = [getattr(self, k) for k in self._properties]
         vals2 = [v if not isinstance(v, RecordList) else repr(v)
                  for v in vals]
-        kv_pairs = zip(self._properties, vals2)
+        kv_pairs = list(zip(self._properties, vals2))
         kv_repr = ', '.join("{0}={1}".format(k, v) for k, v in kv_pairs)
         return "({0})".format(kv_repr)
 
@@ -555,7 +565,7 @@ def record_cls(cls_name, cls_description, fields, required_fields=(),
     # Taken and modified from this recipe:
     # http://code.activestate.com/recipes/576555-records/ (MIT License)
     tfield = ('name', 'type', 'default', 'read_only', 'description')
-    fields = tuple((dict(zip(tfield, f)) for f in fields))
+    fields = tuple((dict(list(zip(tfield, f))) for f in fields))
     for f in fields:
         if f['type'] == str:
             f['default'] = "'{0}'".format(f['default'])
@@ -586,7 +596,7 @@ def record_cls(cls_name, cls_description, fields, required_fields=(),
         if name.startswith('_'):
             raise ValueError("Class name and field names cannot start with an "
                              "underscore: {0}".format(name))
-    for name, count in Counter(field_names).items():
+    for name, count in list(Counter(field_names).items()):
         if count > 1:
             raise ValueError("Encountered duplicate field name: {0}"
                              .format(name))

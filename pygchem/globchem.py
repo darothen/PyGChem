@@ -20,7 +20,21 @@ FAST-J). The data is commonly stored in the files "globchem.dat",
 TODO: show here some examples.
 
 """
+from __future__ import division
+from __future__ import unicode_literals
+from __future__ import print_function
+from __future__ import absolute_import
 
+from future import standard_library
+standard_library.install_aliases()
+from builtins import *
+from builtins import map
+from builtins import zip
+from builtins import str
+from builtins import range
+from past.builtins import basestring
+from past.utils import old_div
+from builtins import object
 import collections
 import types
 import numbers
@@ -120,7 +134,7 @@ class Species(object):
         if not isinstance(val, basestring):
             raise TypeError("Bad type for id: expected string, got %s"
                             % type(val).__name__)
-        if len(val) not in xrange(1, 11):
+        if len(val) not in list(range(1, 11)):
             raise ValueError("Length of id string cannot contain more than "
                              "11 characters (but at least 1 character)")
         self._id = val.upper()
@@ -136,7 +150,7 @@ class Species(object):
         if not isinstance(val, basestring):
             raise TypeError("Bad type for name: expected string, got %s"
                             % type(val).__name__)
-        if len(val) not in xrange(0, 40):
+        if len(val) not in list(range(0, 40)):
             raise ValueError("Length of name string cannot contain more than "
                              "40 characters")
         self._name = val
@@ -152,7 +166,7 @@ class Species(object):
         if not isinstance(val, basestring):
             raise TypeError("Bad type for formula: expected string, got %s"
                             % type(val).__name__)
-        if len(val) not in xrange(0, 32):
+        if len(val) not in list(range(0, 32)):
             raise ValueError("Length of name string cannot contain more than "
                              "32 characters")
         self._formula = val.upper()
@@ -169,7 +183,7 @@ class Species(object):
         if not isinstance(val, basestring):
             raise TypeError("Bad type for status: expected string, got %s"
                             % type(val).__name__)
-        if val not in self.valid_status.keys():
+        if val not in list(self.valid_status.keys()):
             raise ValueError("Bad value for status: expected one of the "
                              "following capital letters:\n%s"
                              % pprint.pformat(self.valid_status))
@@ -229,7 +243,7 @@ class Species(object):
     @mb_groups.setter
     def mb_groups(self, val):
         if (not isinstance(val, dict)
-            or not all(isinstance(v, numbers.Integral) for v in val.values())):
+            or not all(isinstance(v, numbers.Integral) for v in list(val.values()))):
             raise ValueError("mb_groups must be a dictionary with int values")
         self._mb_groups = val
 
@@ -253,11 +267,11 @@ class Species(object):
         """
         spec = cls(species_dict['id'])
         for k in cls.get_attributes():
-            if k not in species_dict.keys():
+            if k not in list(species_dict.keys()):
                 warnings.warn("species attribute '%s' not in the dictionary, "
                               "default value %s used"
                               % (k, str(getattr(spec, k))))
-        for k, v in species_dict.items():
+        for k, v in list(species_dict.items()):
             setattr(spec, k, v)
         return spec
 
@@ -265,7 +279,7 @@ class Species(object):
         """
         Return a :class:`Species` object as a python dictionary
         """
-        dict_attr_names = [k for k in self.__dict__.keys() if k[0] != '_']
+        dict_attr_names = [k for k in list(self.__dict__.keys()) if k[0] != '_']
         attr_names = set(dict_attr_names + self.get_attributes())
 
         return {k: getattr(self, k) for k in attr_names}
@@ -276,7 +290,7 @@ class Species(object):
         Return a list of the names of the :class:`Species` built-in attributes 
         (i.e., properties). 
         """
-        return [k for k, v in cls.__dict__.items() if type(v) == property]
+        return [k for k, v in list(cls.__dict__.items()) if type(v) == property]
 
 
 class ReactionRate(object):
@@ -344,10 +358,10 @@ class ReactionRate(object):
 
         info = {'flag': flags, 'function': functions, 'fname': fnames,
                 'descr': descr}
-        if key not in info.keys() or val not in info.keys():
+        if key not in list(info.keys()) or val not in list(info.keys()):
             raise ValueError("invalid argument(s) key and/or val")
 
-        return dict(zip(info[key], info[val]))
+        return dict(list(zip(info[key], info[val])))
 
     @classmethod
     def get_ratef_fromflag(cls, flag):
@@ -387,7 +401,7 @@ class ReactionRate(object):
         arr : list of 3 floats
             parameters [A,B,C] of the rate constant expression
         """
-        return arr[0] * (300 / T) ** arr[1] * np.exp(arr[2] / T)
+        return arr[0] * (old_div(300, T)) ** arr[1] * np.exp(old_div(arr[2], T))
 
     @classmethod
     def p_ratek(cls, T, cM, arrlow=[0., 0., 0.], arrhigh=[0., 0., 0.],
@@ -437,15 +451,15 @@ class ReactionRate(object):
         Pr = K0 * cM / Kinf
 
         if falloff[2] != 0.:
-            Fc = math.exp(-T / falloff[1]) + math.exp(-falloff[2] / T)
+            Fc = math.exp(old_div(-T, falloff[1])) + math.exp(old_div(-falloff[2], T))
         elif falloff[1] != 0.:
-            Fc = math.exp(-T / falloff[1])
+            Fc = math.exp(old_div(-T, falloff[1]))
         else:
             Fc = falloff[0]
 
-        F = Fc ** (1. / (1. + math.log10(Pr) ** 2))
+        F = Fc ** (old_div(1., (1. + math.log10(Pr) ** 2)))
 
-        K = Kinf * (Pr / (1. + Pr)) * F
+        K = Kinf * (old_div(Pr, (1. + Pr))) * F
 
         return K
 
@@ -483,7 +497,7 @@ class ReactionRate(object):
             direction)
         """
         Kf = cls.p_ratek(T, cM, f_arrlow, f_arrhigh, f_falloff)
-        return Kf / cls.arr_ratek(T, arr)
+        return old_div(Kf, cls.arr_ratek(T, arr))
 
     @classmethod
     def x_ratek(cls, T, cM, arrK0=[0., 0., 0.], arrK2=[0., 0., 0.],
@@ -571,7 +585,7 @@ class ReactionRate(object):
         """
         K1 = cls.arr_ratek(T, arrK1)
         K2 = cls.arr_ratek(T, arrK2)
-        K = (K1 + K2 * cM) * (1. + 1.4e-21 * cH2O * math.exp(2200. / T))
+        K = (K1 + K2 * cM) * (1. + 1.4e-21 * cH2O * math.exp(old_div(2200., T)))
 
     @classmethod
     def a_ratek(cls, T, cM, arrK1=[0., 0., 0.], xcarbon=0.):
@@ -697,7 +711,7 @@ class ReactionRate(object):
         """
         K1 = cls.arr_ratek(T, arrK1)
         K2 = cls.arr_ratek(T, arrK2)
-        return K1 / (1. + K2)
+        return old_div(K1, (1. + K2))
 
     @classmethod
     def g_ratek(cls, T, cO2, arrK1, arrK2):
@@ -723,7 +737,7 @@ class ReactionRate(object):
         """
         K1 = cls.arr_ratek(T, arrK1)
         K2 = cls.arr_ratek(T, arrK2)
-        return K1 / (1. + K2 * cO2)
+        return old_div(K1, (1. + K2 * cO2))
 
     # TODO: built-in function for HOC2H4O ------> HO2 + 2CH2O  (see calcrate.f)
 
@@ -753,12 +767,12 @@ class ReactionRate(object):
         xminf = 8.1
         xf = 0.411
 
-        xxyn = alpha * math.exp(beta * xcarbn) * zdnum * ((300. / T) ** xm0)
-        yyyn = y300 * ((300. / T) ** xminf)
-        aaa = math.log10(xxyn / yyyn)
-        zzyn = 1. / (1. + aaa * aaa)
-        rarb = (xxyn / (1. + (xxyn / yyyn))) * (xf ** zzyn)
-        fyrno3 = rarb / (1. + rarb)
+        xxyn = alpha * math.exp(beta * xcarbn) * zdnum * ((old_div(300., T)) ** xm0)
+        yyyn = y300 * ((old_div(300., T)) ** xminf)
+        aaa = math.log10(old_div(xxyn, yyyn))
+        zzyn = old_div(1., (1. + aaa * aaa))
+        rarb = (old_div(xxyn, (1. + (old_div(xxyn, yyyn))))) * (xf ** zzyn)
+        fyrno3 = old_div(rarb, (1. + rarb))
 
         return fyrno3
 
@@ -916,7 +930,7 @@ class Reaction(object):
         if not isinstance(val, basestring):
             raise TypeError("Bad type for status: expected string, got %s"
                             % type(val).__name__)
-        if val not in self.valid_status.keys():
+        if val not in list(self.valid_status.keys()):
             raise ValueError("Bad value for status: expected one of the "
                              "following capital letters:\n%s"
                              % pprint.pformat(self.valid_status))
@@ -959,12 +973,12 @@ class Reaction(object):
         """
         reac = cls(reac_dict['id'])
         for k in cls.get_attributes():
-            if k not in reac_dict.keys():
+            if k not in list(reac_dict.keys()):
                 warnings.warn("reaction attribute '%s' not in the dictionary, "
                               "default value %s used"
                               % (k, str(getattr(reac, k))))
         reac.flag = reac_dict['flag']   # must be set before rate
-        for k, v in reac_dict.items():
+        for k, v in list(reac_dict.items()):
             setattr(reac, k, v)
         return reac
 
@@ -972,7 +986,7 @@ class Reaction(object):
         """
         Return a :class:`Reaction` object as a python dictionary
         """
-        dict_attr_names = [k for k in self.__dict__.keys() if k[0] != '_']
+        dict_attr_names = [k for k in list(self.__dict__.keys()) if k[0] != '_']
         attr_names = set(dict_attr_names + self.get_attributes())
 
         return {k: getattr(self, k) for k in attr_names}
@@ -983,7 +997,7 @@ class Reaction(object):
         Return a list of the names of the :class:`Reaction` built-in attributes 
         (i.e., properties). 
         """
-        return [k for k, v in cls.__dict__.items() if type(v) == property]
+        return [k for k, v in list(cls.__dict__.items()) if type(v) == property]
 
     def format(self):
         """
@@ -1095,7 +1109,7 @@ class Globchem(object):
         value : int
             default value to assign to each species
         """
-        if group_id in self.mb_groups.keys():
+        if group_id in list(self.mb_groups.keys()):
             raise KeyError("group_id already in mass balance groups")
         if status not in ('A', 'D'):
             raise ValueError("Bad value for status")
@@ -1104,7 +1118,7 @@ class Globchem(object):
 
         self.mb_groups[group_id] = status
 
-        for s in self.species.values():
+        for s in list(self.species.values()):
             s.mb_groups[group_id] = value
 
     def remove_mb_group(self, group_id):
@@ -1116,17 +1130,17 @@ class Globchem(object):
         group_id : string
             mass blance group identifiant
         """
-        if group_id not in self.mb_groups.keys():
+        if group_id not in list(self.mb_groups.keys()):
             raise KeyError("no mass balance group with group_id")
         del self.mb_groups[group_id]
-        for s in self.species.values():
+        for s in list(self.species.values()):
             del s.mb_groups[group_id]
 
     def filter_mb_groups_bystatus(self, status):
         """
         Return a id list with mass balance groups of 'status'   
         """
-        return [k for k, v in self.mb_groups.items() if v == status]
+        return [k for k, v in list(self.mb_groups.items()) if v == status]
 
     def add_species(self, spec):
         """
@@ -1140,7 +1154,7 @@ class Globchem(object):
         def add_one_species(spec1):
             if not isinstance(spec1, Species):
                 raise TypeError("argument is not a Species object")
-            elif spec1.id in self.species.keys():
+            elif spec1.id in list(self.species.keys()):
                 raise KeyError("species with key %s already exists in Globchem"
                            % spec1.id)
             self.species[spec1.id] = spec1
@@ -1173,7 +1187,7 @@ class Globchem(object):
             # update reactions
             for rt, rs in [[self.reac_kn, "kinetic"],
                            [self.reac_ph, "photolysis"]]:
-                reac_list = [k for k, v in rt.items()
+                reac_list = [k for k, v in list(rt.items())
                              if spec1_id in v.reactants
                              or spec1_id in v.products]
                 self.remove_reaction(reac_list, rs)
@@ -1211,13 +1225,13 @@ class Globchem(object):
             new species
         """
         def copy_one_species(spec1_id, new1_id, **kwargs):
-            if spec1_id not in self.species.keys():
+            if spec1_id not in list(self.species.keys()):
                 raise KeyError("Species %s doesn't exist" % spec1_id)
 
             new_spec = copy.deepcopy(self.species[spec1_id])
             new_spec.id = new1_id
-            for k, v in kwargs.items():
-                if k not in new_spec.to_dict().keys():
+            for k, v in list(kwargs.items()):
+                if k not in list(new_spec.to_dict().keys()):
                     raise KeyError("Invalid Species property : %s" % k)
                 setattr(new_spec, k, v)
 
@@ -1226,9 +1240,9 @@ class Globchem(object):
             # update reactions
             for rt, rs in [[self.reac_kn, "kinetic"],
                            [self.reac_ph, "photolysis"]]:
-                reac_list1 = [k for k, v in rt.items()
+                reac_list1 = [k for k, v in list(rt.items())
                               if spec1_id in v.reactants]
-                reac_list2 = [k for k, v in rt.items()
+                reac_list2 = [k for k, v in list(rt.items())
                               if spec1_id in v.products]
                 for k in reac_list1:
                     new_id = k + 0.5
@@ -1244,11 +1258,11 @@ class Globchem(object):
 
         if hasattr(new_id, "__iter__") and not isinstance(new_id, dict):
             # verify and re-arrange kwargs
-            for k, listv in kwargs.items():
+            for k, listv in list(kwargs.items()):
                 if len(listv) != len(new_id):
                     raise ValueError("Invalid value for kwarg '%s'" % k)
-            tp = zip(*([(k, v) for v in listv] for k, listv in kwargs.items()))
-            list_kwargs = map(dict, tp)
+            tp = list(zip(*([(k, v) for v in listv] for k, listv in list(kwargs.items()))))
+            list_kwargs = list(map(dict, tp))
 
             if len(list_kwargs) > 0:
                 for s, kw in zip(new_id, list_kwargs):
@@ -1292,9 +1306,9 @@ class Globchem(object):
         str_fexpr = "fexpr(" + str_list_attr + ")"
 
         if getid:
-            return [id for id, s in self.species.items() if eval(str_fexpr)]
+            return [id for id, s in list(self.species.items()) if eval(str_fexpr)]
         else:
-            return [s for s in self.species.values() if eval(str_fexpr)]
+            return [s for s in list(self.species.values()) if eval(str_fexpr)]
 
     def add_reaction(self, reac, reorder=True):
         """
@@ -1314,13 +1328,13 @@ class Globchem(object):
         """
         def add_one_reaction(reac1):
             if isinstance(reac1, (PhotolysisReaction)):
-                if reac1.id in self.reac_ph.keys():
+                if reac1.id in list(self.reac_ph.keys()):
                     raise KeyError("photolysis reaction with id/key %s already"
                                    " exists in Globchem" % reac1.id)
                 else:
                     self.reac_ph[reac1.id] = reac1
             elif isinstance(reac1, (Reaction, KineticReaction)):
-                if reac1.id in self.reac_kn.keys():
+                if reac1.id in list(self.reac_kn.keys()):
                     raise KeyError("kinetic reaction with id/key %s already "
                                    "exists in Globchem" % reac1.id)
                 else:
@@ -1401,13 +1415,13 @@ class Globchem(object):
             new reaction
         """
         def copy_one_reaction(reac1_id, new1_id, rt, reorder, **kwargs):
-            if reac1_id not in rt.keys():
+            if reac1_id not in list(rt.keys()):
                 raise KeyError("Reaction %s doesn't exist" % spec1_id)
 
             new_reac = copy.deepcopy(rt[reac1_id])
             new_reac.id = new1_id
-            for k, v in kwargs.items():
-                if k not in new_reac.to_dict().keys():
+            for k, v in list(kwargs.items()):
+                if k not in list(new_reac.to_dict().keys()):
                     raise KeyError("Invalid Reaction property : %s" % k)
                 setattr(new_reac, k, v)
 
@@ -1420,11 +1434,11 @@ class Globchem(object):
 
         if hasattr(new_id, "__iter__") and not isinstance(new_id, dict):
             # verify and re-arrange kwargs
-            for k, listv in kwargs.items():
+            for k, listv in list(kwargs.items()):
                 if len(listv) != len(new_id):
                     raise ValueError("Invalid value for kwarg '%s'" % k)
-            tp = zip(*([(k, v) for v in listv] for k, listv in kwargs.items()))
-            list_kwargs = map(dict, tp)
+            tp = list(zip(*([(k, v) for v in listv] for k, listv in list(kwargs.items()))))
+            list_kwargs = list(map(dict, tp))
 
             if len(list_kwargs) > 0:
                 for r, kw in zip(new_id, list_kwargs):
@@ -1473,9 +1487,9 @@ class Globchem(object):
             rt = self.reac_ph
 
         if getid:
-            return [id for id, s in rt.items() if eval(str_fexpr)]
+            return [id for id, s in list(rt.items()) if eval(str_fexpr)]
         else:
-            return [s for s in rt.values() if eval(str_fexpr)]
+            return [s for s in list(rt.values()) if eval(str_fexpr)]
 
     def _reorder_reactions(self):
         """
@@ -1515,11 +1529,11 @@ class Globchem(object):
         gc.filename_dat = filename
         gc.description = header
         gc.mb_groups = mb_groups
-        gc.add_species((Species.from_dict(s) for s in species.values()))
+        gc.add_species((Species.from_dict(s) for s in list(species.values())))
         gc.add_reaction((KineticReaction.from_dict(rkn)
-                         for rkn in reac_kn.values()))
+                         for rkn in list(reac_kn.values())))
         gc.add_reaction((PhotolysisReaction.from_dict(rph)
-                         for rph in reac_ph.values()))
+                         for rph in list(reac_ph.values())))
 
         # TODO: add photolysis reactions
 

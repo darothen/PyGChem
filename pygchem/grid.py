@@ -18,7 +18,17 @@ It provides default grid specification for various models and allows to easily
 get grid coordinates. User-specific grids can also be defined.
 
 """
+from __future__ import division
+from __future__ import unicode_literals
+from __future__ import print_function
+from __future__ import absolute_import
 
+from future import standard_library
+standard_library.install_aliases()
+from builtins import *
+from builtins import hex
+from builtins import object
+from past.utils import old_div
 import numpy as np
 
 from pygchem.tools import atm, gridspec
@@ -116,7 +126,7 @@ class CTMGrid(object):
         self._altitude_edges = None
         self._altitude_centers = None
 
-        for k, v in kwargs.items():
+        for k, v in list(kwargs.items()):
             self.__setattr__(k, v)
 
     @classmethod
@@ -153,7 +163,7 @@ class CTMGrid(object):
         """
         settings = gridspec.get_model_info(model_name)
         model = settings.pop('model_name')
-        for k, v in kwargs.items():
+        for k, v in list(kwargs.items()):
             if k in ('resolution', 'Psurf'):
                 settings[k] = v
 
@@ -235,8 +245,8 @@ class CTMGrid(object):
         rlon = self.resolution[0]
         rlat = self.resolution[1]
 
-        Nlon = int(360. / rlon)
-        Nlat = int(180. / rlat) + self.halfpolar
+        Nlon = int(old_div(360., rlon))
+        Nlat = int(old_div(180., rlat)) + self.halfpolar
 
         elon = np.arange(Nlon + 1) * rlon - np.array(180.)
         elon -= rlon / 2. * self.center180
@@ -245,14 +255,14 @@ class CTMGrid(object):
         elat[0] = -90.
         elat[-1] = 90.
 
-        clon = (elon - rlon / 2.)[1:]
+        clon = (elon - old_div(rlon, 2.))[1:]
         clat = np.arange(Nlat) * rlat - np.array(90.)
 
         if self.halfpolar:                        # Fix grid boundaries
-            clat[0] = (elat[0] + elat[1]) / 2.
+            clat[0] = old_div((elat[0] + elat[1]), 2.)
             clat[-1] = - clat[0]
         else:
-            clat += (elat[1] - elat[0]) / 2.
+            clat += old_div((elat[1] - elat[0]), 2.)
 
         self._lonlat_centers = (clon, clat)
         self._lonlat_edges = (elon, elat)
@@ -546,8 +556,8 @@ class CTMGrid(object):
         Pc = 0.5 * (Pe[0:-1] + Pe[1:])
 
         if self.hybrid:
-            ETAe = (Pe - Ptop) / (Psurf - Ptop)
-            ETAc = (Pc - Ptop) / (Psurf - Ptop)
+            ETAe = old_div((Pe - Ptop), (Psurf - Ptop))
+            ETAc = old_div((Pc - Ptop), (Psurf - Ptop))
         else:
             SIGe = SIGe * np.ones_like(Psurf)
             SIGc = SIGc * np.ones_like(Psurf)

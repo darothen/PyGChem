@@ -10,7 +10,16 @@
 Read / Write Harvard-NASA Emissions Component (HEMCO) settings files.
 
 """
+from __future__ import unicode_literals
+from __future__ import print_function
+from __future__ import division
+from __future__ import absolute_import
 
+from future import standard_library
+standard_library.install_aliases()
+from builtins import *
+from builtins import zip
+from builtins import str
 import re
 import itertools
 from types import StringTypes
@@ -156,7 +165,7 @@ def _get_sections_lines(filename):
                 continue
             if 'BEGIN SECTION' in line:
                 section = line.replace('BEGIN SECTION ', '')
-                if not section in lines.keys():
+                if not section in list(lines.keys()):
                     lines[section] = []
                 continue
             if 'END SECTION' in line:

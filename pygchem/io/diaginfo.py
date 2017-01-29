@@ -11,7 +11,14 @@ Read / write 'diaginfo.dat' and 'tracerinfo.dat' files (GEOS-Chem diagnostics
 metadata).
 
 """
+from __future__ import unicode_literals
+from __future__ import print_function
+from __future__ import division
+from __future__ import absolute_import
 
+from future import standard_library
+standard_library.install_aliases()
+from builtins import *
 from pygchem.utils.tff import read_fmt_file, write_fmt_file
 
 DIAGINFO_FMT = (

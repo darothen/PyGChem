@@ -1,6 +1,15 @@
 '''
 Miscellaneous functions, classes etc
 '''
+from __future__ import unicode_literals
+from __future__ import print_function
+from __future__ import division
+from __future__ import absolute_import
+from future import standard_library
+standard_library.install_aliases()
+from builtins import *
+from builtins import next
+from builtins import object
 import sys
 IS_PYTHON3 = sys.version_info[0] >= 3
 
@@ -24,7 +33,7 @@ class has_next_iterator(object):
         result = next(self.it)
     self._has_next = None
     return result
-  def next(self):
+  def __next__(self):
     if self._has_next:
       result = self._the_next
     else:

@@ -33,7 +33,15 @@ See Also
     provides a more complete API for handling grids used by GEOS-Chem.
 
 """
+from __future__ import unicode_literals
+from __future__ import print_function
+from __future__ import division
+from __future__ import absolute_import
 
+from future import standard_library
+standard_library.install_aliases()
+from builtins import *
+from builtins import zip
 import re
 import itertools
 
@@ -543,11 +551,10 @@ def get_model_info(model_name):
     gen_seps = itertools.combinations_with_replacement(
         sep_chars, len(split_name) - 1
     )
-    test_names = ("".join((n for n in itertools.chain(*zip(split_name,
-                                                           s + ('',)))))
+    test_names = ("".join((n for n in itertools.chain(*list(zip(split_name,
+                                                           s + ('',))))))
                   for s in gen_seps)
-    match_names = list(filter(lambda name: name in get_supported_models(),
-                              test_names))
+    match_names = list([name for name in test_names if name in get_supported_models()])
 
     if not len(match_names):
         raise ValueError("Model '{0}' is not supported".format(model_name))

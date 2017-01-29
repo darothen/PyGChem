@@ -16,7 +16,14 @@ Code written by Gerrit Kuhlmann is also included in this package.
 :license: GPLv3, see LICENSE for details.
 
 """
+from __future__ import unicode_literals
+from __future__ import print_function
+from __future__ import division
+from __future__ import absolute_import
 
+from future import standard_library
+standard_library.install_aliases()
+from builtins import *
 __all__ = ["config", "globchem", "grid", "diagnostics", "io", "tools",
            "utils"]
 __version__ = '0.3.0dev'

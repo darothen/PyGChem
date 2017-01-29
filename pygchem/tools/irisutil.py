@@ -10,7 +10,16 @@
 A bunch of utility functions based on the SciTools's Iris package.
 
 """
+from __future__ import division
+from __future__ import unicode_literals
+from __future__ import print_function
+from __future__ import absolute_import
 
+from future import standard_library
+standard_library.install_aliases()
+from builtins import *
+from builtins import range
+from past.utils import old_div
 import collections
 import warnings
 from types import StringTypes
@@ -365,7 +374,7 @@ def fix_cube_attributes_vals(cube):
 
     Convert it to int.
     """
-    for key, val in cube.attributes.items():
+    for key, val in list(cube.attributes.items()):
         if type(val) == bool:
             cube.attributes[key] = int(val)
 
@@ -434,7 +443,7 @@ def ppbC_2_ppbv(cube):
 
     if is_hydrocarbon and is_ppbc:
         carbon_weight = cube.attributes.get('carbon_weight')
-        cube.data = cube.data / carbon_weight
+        cube.data = old_div(cube.data, carbon_weight)
         cube.units = 'ppbv'
 
 
@@ -806,7 +815,7 @@ def get_altitude_coord(gridbox_heights, topography):
                      base_level_altitude)
     altitude_lbnd = altitude_ubnd - gridbox_heights.data
     altitude_lbnd[..., 1:] = altitude_ubnd[..., :-1]  # force contiguous bounds
-    altitude_points = (altitude_lbnd + altitude_ubnd) / 2.
+    altitude_points = old_div((altitude_lbnd + altitude_ubnd), 2.)
 
     altitude_bounds = np.concatenate((altitude_lbnd[..., np.newaxis],
                                       altitude_ubnd[..., np.newaxis]),
@@ -974,7 +983,7 @@ def compute_cell_volumes(cube, lon_coord='longitude', lat_coord='latitude',
                            volume,
                            long_name=v_long_name,
                            units=out_units),
-                           data_dims=range(0, height_coord.ndim))
+                           data_dims=list(range(0, height_coord.ndim)))
 
 
 def compute_tracer_columns(mixing_ratio, n_air, z_coord,
@@ -1085,7 +1094,7 @@ def _compute_exchange_vertical(src_z_coord, dst_z_coord):
     temp = np.unique(temp)
 
     exchange_z_bounds = np.column_stack((temp[:-1], temp[1:]))
-    exchange_z_points = (exchange_z_bounds[:, 0] + exchange_z_bounds[:, 1]) / 2.
+    exchange_z_points = old_div((exchange_z_bounds[:, 0] + exchange_z_bounds[:, 1]), 2.)
 
     exchange_z_coord = iris.coords.DimCoord(
         exchange_z_points,
@@ -1227,9 +1236,9 @@ def regrid_conservative_vertical(src_cube, dst_grid_cube,
     # compute interpolation weights and data values
     # on the exchange grid
     if src_data_type == 'intensive':
-        exchange_iweights = exchange_heights / dst_heights_mapped
+        exchange_iweights = old_div(exchange_heights, dst_heights_mapped)
     elif src_data_type == 'extensive':
-        exchange_iweights = exchange_heights / src_heights_mapped
+        exchange_iweights = old_div(exchange_heights, src_heights_mapped)
     else:
         raise ValueError("invalid source data type: {}"
                          .format(src_data_type))
@@ -1247,7 +1256,7 @@ def regrid_conservative_vertical(src_cube, dst_grid_cube,
     valid_heights = np.where(np.isnan(exchange_data), np.nan, exchange_heights)
     overlap_heights = np.nansum((valid_heights[np.newaxis, :] * levels_mask),
                                 axis=1)
-    overlap_heights_relative = overlap_heights / dst_heights
+    overlap_heights_relative = old_div(overlap_heights, dst_heights)
     nan_indices = np.nonzero(overlap_heights_relative < overlap_tol)
     dst_data[nan_indices] = np.nan
 

@@ -14,7 +14,17 @@ Also adds support for BPCH format to Iris.
 """
 
 from __future__ import absolute_import
+from __future__ import unicode_literals
+from __future__ import print_function
+from __future__ import division
 
+from future import standard_library
+standard_library.install_aliases()
+from builtins import *
+from builtins import next
+from builtins import str
+from builtins import zip
+from builtins import range
 import glob
 import warnings
 import datetime
@@ -53,7 +63,7 @@ def _get_datablock_dim_coords(datablock, coord_cache):
     cache_fields = ('modelname', 'resolution', 'origin', 'shape')
     cache_key = '_'.join((str(datablock[f]) for f in cache_fields))
 
-    if cache_key in coord_cache.keys():
+    if cache_key in list(coord_cache.keys()):
         return coord_cache[cache_key]
 
     ctm_grid = grid.CTMGrid.from_model(datablock['modelname'],
@@ -64,7 +74,7 @@ def _get_datablock_dim_coords(datablock, coord_cache):
         shape3 = np.pad(shape, (0, len(origin) - len(shape)), 'constant')
         imin = np.array(origin) - 1
         imax = imin + np.array(shape3)
-        region_box = zip(imin, imax)
+        region_box = list(zip(imin, imax))
     else:
         region_box = None
 
@@ -252,7 +262,7 @@ def fix_bpch2nc(cube, field, filename):
         #dummy_coord = iris.coords.DimCoord([0], long_name='dummy',
         #                                   bounds=[0, 1])
         #cube.add_dim_coord(dummy_coord, 0)
-        return next(cube.slices(range(1, cube.ndim)))
+        return next(cube.slices(list(range(1, cube.ndim))))
 
 
 def fix_bpch2coards(cube, field, filename):

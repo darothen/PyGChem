@@ -10,7 +10,16 @@
 Read / write binary punch (BPCH) files.
 
 """
+from __future__ import division
+from __future__ import unicode_literals
+from __future__ import print_function
+from __future__ import absolute_import
 
+from future import standard_library
+standard_library.install_aliases()
+from builtins import *
+from past.utils import old_div
+from builtins import object
 import os
 
 import numpy as np
@@ -74,7 +83,7 @@ class BPCHDataProxy(object):
         return {attr: getattr(self, attr) for attr in self.__slots__}
 
     def __setstate__(self, state):
-        for key, value in state.iteritems():
+        for key, value in list(state.items()):
             setattr(self, key, value)
 
 
@@ -247,7 +256,7 @@ def append_bpch(bpch_file, datablock):
 
     """
     if isinstance(datablock['data'], BPCHDataProxy):
-        data = datablock['data'].data / datablock['data'].scale_factor
+        data = old_div(datablock['data'].data, datablock['data'].scale_factor)
     else:
         data = datablock['data']
 

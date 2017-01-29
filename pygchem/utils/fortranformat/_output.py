@@ -1,3 +1,13 @@
+from __future__ import division
+from __future__ import unicode_literals
+from __future__ import print_function
+from __future__ import absolute_import
+from future import standard_library
+standard_library.install_aliases()
+from builtins import *
+from builtins import next
+from builtins import str
+from past.utils import old_div
 import math
 import itertools
 import sys
@@ -287,7 +297,7 @@ def _compose_float_string(w, e, d, state, val, ftype):
         nb = 0
         save_scale_factor = state['scale']
         exp_d = 10 ** d
-        if (0.0 < tmp < (0.1 - 0.05 / exp_d)) or \
+        if (0.0 < tmp < (0.1 - old_div(0.05, exp_d))) or \
             (tmp >= (exp_d - 0.5)):
             ftype = 'E'
         elif tmp == 0.0:

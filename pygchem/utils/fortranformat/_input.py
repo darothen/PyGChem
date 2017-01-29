@@ -1,3 +1,12 @@
+from __future__ import division
+from __future__ import unicode_literals
+from __future__ import print_function
+from __future__ import absolute_import
+from future import standard_library
+standard_library.install_aliases()
+from builtins import *
+from builtins import next
+from past.utils import old_div
 import re
 import pdb
 import sys
@@ -345,8 +354,8 @@ def read_float(ed, state, record):
             return (None, state)
     # Special cases: insert a decimal if none specified
     if ('.' not in teststr) and (ed.decimal_places is not None):
-        val = val / 10 ** ed.decimal_places
+        val = old_div(val, 10 ** ed.decimal_places)
     # Apply scale factor if exponent not supplied
     if 'E' not in teststr:
-        val = val / 10 ** state['scale'] 
+        val = old_div(val, 10 ** state['scale']) 
     return (val, state)

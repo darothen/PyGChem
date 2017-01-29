@@ -11,7 +11,18 @@
 """
 Module that defines functions for checking various things
 """
+from __future__ import unicode_literals
+from __future__ import print_function
+from __future__ import division
+from __future__ import absolute_import
 
+from future import standard_library
+standard_library.install_aliases()
+from builtins import *
+from builtins import zip
+from builtins import range
+from past.builtins import basestring
+from builtins import object
 import collections
 
 
@@ -137,24 +148,24 @@ def check_fromref(check, ref, raise_error=True, traceback=[]):
     if isinstance(check, dict):
         # check a dictionary with user defined keys but values of
         # the same type (if ref is a dictionary with a unique key 'anykey')
-        if 'anykey' in ref.keys():
-            lcheck = check.values()
-            lref = ref.values() * len(lcheck)
-            lname = ["key-param '%s'" % k for k in check.keys()]
+        if 'anykey' in list(ref.keys()):
+            lcheck = list(check.values())
+            lref = list(ref.values()) * len(lcheck)
+            lname = ["key-param '%s'" % k for k in list(check.keys())]
         # otherwise, check the keys 
         else:
-            for k in ref.keys():
-                if k not in check.keys():
+            for k in list(ref.keys()):
+                if k not in list(check.keys()):
                     if raise_error:
                         raise ValueError("missing key '%s' in dictionary" % k)
                     check_passes = False
                     break
-            lcheck = [check[k] for k in ref.keys()]
-            lref = ref.values()
-            lname = ["key-param '%s'" % k for k in ref.keys()]
+            lcheck = [check[k] for k in list(ref.keys())]
+            lref = list(ref.values())
+            lname = ["key-param '%s'" % k for k in list(ref.keys())]
     # otherwise: build sequences    
     else:
-        lname = ['index %i' % i for i in xrange(0, len(check))]
+        lname = ['index %i' % i for i in range(0, len(check))]
         lcheck = check
         lref = ref
         if len(lref) < len(lcheck):
