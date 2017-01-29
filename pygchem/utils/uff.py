@@ -24,15 +24,16 @@ from builtins import str
 from past.builtins import basestring
 from past.utils import old_div
 import struct
+import io
 
 
 _FIX_ERROR = ("Pre- and suffix of line do not match. This can happen, if the"
               " `endian` is incorrect.")
 
 
-class FortranFile(file):
+class FortranFile(io.FileIO):
     """
-    A class for reading and writing unformatted binary Fortran files. 
+    A class for reading and writing unformatted binary Fortran files.
 
     Parameters
     ----------
@@ -57,7 +58,7 @@ class FortranFile(file):
     way as reading "real lines" in a text file. A format can be given,
     while reading or writing to pack or unpack data into a binary
     format, using the 'struct' module from the Python standard library.
-    
+
     See Documentation of Python's struct module for details on endians and
     format strings: https://docs.python.org/library/struct.html
     """
