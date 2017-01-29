@@ -17,7 +17,7 @@ ALLOW_ZERO_WIDTH_EDS = True
 if sys.version_info[0] >= 3:
     PROC_MAXINT = sys.maxsize
 else:
-    PROC_MAXINT = sys.maxint
+    PROC_MAXINT = sys.maxsize
 # Processor dependant default for including leading plus or not
 PROC_INCL_PLUS = False 
 # Option to allow signed binary, octal and hex on input (not a FORTRAN feature)
@@ -45,7 +45,7 @@ def reset():
     if sys.version_info[0] >= 3:
         PROC_MAXINT = sys.maxsize
     else:
-        PROC_MAXINT = sys.maxint
+        PROC_MAXINT = sys.maxsize
     RET_WRITTEN_VARS_ONLY = False
     RET_UNWRITTEN_VARS_NONE = True
     PROC_INCL_PLUS = False

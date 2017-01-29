@@ -60,7 +60,7 @@ def output(eds, reversion_eds, values):
             if IS_PYTHON3:
                 ed = next(get_ed)
             else:
-                ed = get_ed.next()
+                ed = next(get_ed)
         else:
             if reversion_contains_output_ed == True:
                 # take from reversion edit descriptors if there is a value
@@ -87,7 +87,7 @@ def output(eds, reversion_eds, values):
                 if IS_PYTHON3:
                     val = next(get_value)
                 else:
-                    val = get_value.next()
+                    val = next(get_value)
             else:
                 # is a edit descriptor that requires a value but no value
                 # todo: does it stop gracefully or raise error?

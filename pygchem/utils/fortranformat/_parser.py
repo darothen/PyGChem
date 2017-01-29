@@ -105,7 +105,7 @@ def _expand_parens(tokens):
                     if IS_PYTHON3:
                         t1 = next(get_tokens)
                     else:
-                        t1 = get_tokens.next()
+                        t1 = next(get_tokens)
                 except StopIteration:
                     raise InvalidFormat('Open parens in format')
                 if t1.type == 'LEFT_PARENS':

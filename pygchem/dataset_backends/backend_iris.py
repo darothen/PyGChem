@@ -252,7 +252,7 @@ def fix_bpch2nc(cube, field, filename):
         #dummy_coord = iris.coords.DimCoord([0], long_name='dummy',
         #                                   bounds=[0, 1])
         #cube.add_dim_coord(dummy_coord, 0)
-        return cube.slices(range(1, cube.ndim)).next()
+        return next(cube.slices(range(1, cube.ndim)))
 
 
 def fix_bpch2coards(cube, field, filename):
@@ -336,7 +336,7 @@ def fix_bpch2coards(cube, field, filename):
                              timeutil.time2tau(tend)]
         if cube.shape[time_dim] == 1:
             slices_dims = [d for d in range(cube.ndim) if d != time_dim]
-            return cube.slices(slices_dims).next()
+            return next(cube.slices(slices_dims))
     except iris.exceptions.CoordinateNotFoundError:
         pass
 

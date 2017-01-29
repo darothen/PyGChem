@@ -227,7 +227,7 @@ def _next(it, default=None):
         if IS_PYTHON3:
             val = next(it)
         else:
-            val = it.next()
+            val = next(it)
     except StopIteration:
         val = default
     return val

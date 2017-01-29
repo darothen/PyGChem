@@ -10,6 +10,7 @@
 Custom, generic data structures.
 
 """
+from __future__ import print_function
 
 import sys
 import os
@@ -661,11 +662,11 @@ def record_cls(cls_name, cls_description, fields, required_fields=(),
     # Execute the class string in a temporary namespace
     namespace = {}
     try:
-        exec "from pygchem.utils.data_structures import Record" in namespace
-        exec class_str in namespace
+        exec("from pygchem.utils.data_structures import Record", namespace)
+        exec(class_str, namespace)
         if verbose:
             print(class_str)
-    except SyntaxError, e:
+    except SyntaxError as e:
         raise SyntaxError(e.message + ':\n' + class_str)
     cls = namespace[cls_name]
     #cls.__init__.im_func.func_defaults = init_defaults

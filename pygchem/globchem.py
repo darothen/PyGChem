@@ -894,7 +894,7 @@ class Reaction(object):
         return self._rate
     @rate.setter
     def rate(self, val):
-        if isinstance(val, (ReactionRate, types.NoneType)):
+        if isinstance(val, (ReactionRate, type(None))):
             self._rate = val
         elif isinstance(val, dict):
             ratef = ReactionRate.get_ratef_fromflag(self.flag)
