@@ -23,7 +23,7 @@ def get_package_data(name, extlist):
             #    and os.path.splitext(fname)[1] in extlist):
             #    flist.append(os.path.join(dirpath, fname)[offset:])
             flist.append(os.path.join(dirpath, fname)[offset:])
-    print "Data files to install: %s" % ", ".join(flist)
+    print("Data files to install: %s" % ", ".join(flist))
     return flist
 
 
@@ -37,7 +37,7 @@ def get_subpackages(name):
                 continue
         if os.path.isfile(os.path.join(dirpath, '__init__.py')):
             splist.append(".".join(dirpath.split(os.sep)))
-    print "Packages and subpackages to install: %s" % ", ".join(splist)
+    print("Packages and subpackages to install: %s" % ", ".join(splist))
     return splist
 
 
