@@ -173,7 +173,6 @@ class _BPCHDataStore(xr.backends.common.AbstractDataStore):
         )
 
         for vname, data, dims, attrs in self.load_from_datablocks(datablocks):
-            print(vname, dims)
             var = xr.Variable(dims, data, attrs)
             self._variables[vname] = var
 
@@ -184,7 +183,6 @@ class _BPCHDataStore(xr.backends.common.AbstractDataStore):
         # self._variables['Ap'] =
         # self._variables['Bp'] =
         # self._variables['altitude'] =
-        print(ctm_grid)
         if ctm_grid.eta_centers is not None:
             lev_vals = ctm_grid.eta_centers
             lev_attrs = {
@@ -242,7 +240,6 @@ class _BPCHDataStore(xr.backends.common.AbstractDataStore):
                 dims = ['lon', 'lat', 'lev', ]
             dims = ['time', ] + dims
 
-            print(vname)
             # Create a new variable if it's not already present
             tracerinfo = datablock['tracerinfo']
             attrs = dict(
@@ -251,18 +248,7 @@ class _BPCHDataStore(xr.backends.common.AbstractDataStore):
                 scale=tracerinfo['scale'],
                 units=tracerinfo['unit']
             )
-            # Don't immediately load... let it be lazy!
-            # # # TODO: using 'chunks' parameter, wrap this in a dask. delayed() call
-            # if vname in self._variables:
-            #     v = self._variables[vname]
-            #     new_data = datablock['data']
-            #     data = np.concatenate(
-            #         [v.data, new_data], axis=0
-            #     )
-            # else:
-            # TODO: Need a better way to concatenate the variable data; doing it this way incurs a huge penalty because everything has to be read from the disk.
             data = datablock['data']
-            print(datablock['data'].file_positions)
 
             yield vname, data, dims, attrs
 
