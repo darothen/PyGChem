@@ -38,19 +38,29 @@ ND49_TITLE = "GEOS-CHEM DIAG49 instantaneous timeseries"
 class BPCHDataProxy(object):
     """A reference to the data payload of a single BPCH file datablock."""
 
-    __slots__ = ('shape', 'dtype', 'path', 'endian', 'file_position',
-                 'scale_factor', 'fill_value', '_data')
+    __slots__ = ('_shape', 'dtype', 'path', 'endian', 'file_positions',
+                 'concat_axis', 'scale_factor', 'fill_value', '_data')
 
-    def __init__(self, shape, dtype, path, endian, file_position,
-                 scale_factor, fill_value):
-        self.shape = shape
+    def __init__(self, shape, dtype, path, endian, file_positions,
+                 concat_axis, scale_factor, fill_value, memmap=True):
+        self._shape = shape
         self.dtype = dtype
         self.path = path
         self.fill_value = fill_value
         self.endian = endian
-        self.file_position = file_position
+        self.file_positions = file_positions
+        self.concat_axis = concat_axis
         self.scale_factor = scale_factor
         self._data = None
+
+    @property
+    def shape(self):
+        if self.concat_axis is None:
+            return self._shape
+        else:
+            shape_bits = list(self._shape)
+            shape_bits[self.concat_axis] = len(self.file_positions)
+            return tuple(shape_bits)
 
     @property
     def ndim(self):
@@ -64,9 +74,13 @@ class BPCHDataProxy(object):
 
     def load(self):
         with uff.FortranFile(self.path, 'rb', self.endian) as bpch_file:
-            bpch_file.seek(self.file_position)
-            data = np.array(bpch_file.readline('*f'))
-            data = data.reshape(self.shape, order='F')
+            all_data = []
+            for pos in self.file_positions:
+                bpch_file.seek(pos)
+                data = np.array(bpch_file.readline('*f'))
+                data = data.reshape(self._shape, order='F')
+                all_data.append(data)
+            data = np.concatenate(all_data, axis=self.concat_axis)
         return data * self.scale_factor
 
     def __getitem__(self, keys):
@@ -88,7 +102,9 @@ class BPCHDataProxy(object):
 
 
 def read_bpch(filename, mode='rb', skip_data=True,
-              diaginfo_file='', tracerinfo_file='', **kwargs):
+              diaginfo_file='', tracerinfo_file='',
+              dummy_prefix_dims=0, concat_blocks=False, first_header=False,
+              **kwargs):
     """
     Read the binary punch file v2 format.
 
@@ -109,6 +125,14 @@ def read_bpch(filename, mode='rb', skip_data=True,
         take a default one.
     tracerinfo_file : string
         path to the 'tracerinfo.dat' file (or empty string).
+    dummy_prefix_dims : int
+        if > 0, then add the indicated number of 'dummy', length-1 dimensions
+        to the beginning of each datablock's shape.
+    concat_blocks : bool
+        if True, logically concatenate blocks from different timestamps during
+        read from disk.
+    first_header : bool
+        if True, only return the header info from the first datablock.
     **kwargs
         extra parameters passed to :class:`pygchem.utils.uff.FortranFile`
         (e.g., `endian`).
@@ -145,6 +169,8 @@ def read_bpch(filename, mode='rb', skip_data=True,
     ctm_info = CTMDiagnosticInfo(diaginfo_file=diaginfo_file,
                                  tracerinfo_file=tracerinfo_file)
 
+    _PARSED_DATABLOCKS = {}
+
     with uff.FortranFile(filename, mode, **kwargs) as bpch_file:
         datablocks = []
         filetype = bpch_file.readline().strip()
@@ -155,6 +181,15 @@ def read_bpch(filename, mode='rb', skip_data=True,
             # read first and second header line
             line = bpch_file.readline('20sffii')
             modelname, res0, res1, halfpolar, center180 = line
+
+            if first_header:
+                return dict(
+                    modelname=str(modelname, 'utf-8'),
+                    resolution=(res0, res1),
+                    halfpolar=halfpolar,
+                    center180=center180,
+                )
+
             line = bpch_file.readline('40si40sdd40s7i')
             category_name, number, unit, tau0, tau1, reserved = line[:6]
             dim0, dim1, dim2, dim3, dim4, dim5, skip = line[6:]
@@ -178,27 +213,48 @@ def read_bpch(filename, mode='rb', skip_data=True,
                 diag_attr = {}
                 cat_attr = {}
 
+            vname = diag['name']
+            fullname = category_name.strip() + "_" + vname
+
             # parse metadata, get data or set a data proxy
+            concat_axis = None
             if dim2 == 1:
                 data_shape = (dim0, dim1)         # 2D field
             else:
                 data_shape = (dim0, dim1, dim2)
+            if dummy_prefix_dims > 0:
+                concat_axis = 0
+                data_shape = tuple([1, ]*dummy_prefix_dims + list(data_shape))
+
             from_file = os.path.abspath(filename)
             file_position = bpch_file.tell()
             if skip_data:
                 bpch_file.skipline()
-                data = BPCHDataProxy(data_shape, np.dtype('f'),
-                                     from_file, bpch_file.endian,
-                                     file_position, diag['scale'], np.nan)
+                if concat_blocks and (fullname in _PARSED_DATABLOCKS):
+                    data = _PARSED_DATABLOCKS[fullname]['data']
+                    data.file_positions.append(file_position)
+                    times = _PARSED_DATABLOCKS[fullname]['times']
+                    times.append(
+                        (timeutil.tau2time(tau0), timeutil.tau2time(tau1))
+                    )
+                    continue
+                else:
+                    data = BPCHDataProxy(data_shape, np.dtype('f'),
+                                         from_file, bpch_file.endian,
+                                         [file_position, ], concat_axis, diag['scale'], np.nan)
             else:
+                # TODO: Converting the BPCHDataProxy to record multiple file
+                #       positions breaks the symmetry with load-on-read below,
+                #       so we should ideally perform a similar sort of concatenation
+                #       operation here, including recording multiple timestamps.
                 data = np.array(bpch_file.readline('*f'))
                 data = data.reshape((dim0, dim1, dim2), order='F')
 
             datablock = {'number': int(number),
-                         'name': diag['name'],
+                         'name': vname,
                          'category': category_name.strip(),
-                         'times': (timeutil.tau2time(tau0),
-                                   timeutil.tau2time(tau1)),
+                         'times': [(timeutil.tau2time(tau0),
+                                    timeutil.tau2time(tau1)), ],
                          'modelname': modelname.strip(),
                          'center180': bool(center180),
                          'halfpolar': bool(halfpolar),
@@ -213,6 +269,7 @@ def read_bpch(filename, mode='rb', skip_data=True,
                          'tracerinfo': diag_attr,
                          'diaginfo': cat_attr}
             datablocks.append(datablock)
+            _PARSED_DATABLOCKS[fullname] = datablock
 
     return filetype, filetitle, datablocks
 
