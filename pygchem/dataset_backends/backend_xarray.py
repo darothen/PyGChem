@@ -48,6 +48,15 @@ def open_bpchdataset(filename,
                      diaginfo_file='diaginfo.dat',
                      endian=">", default_dtype=DEFAULT_DTYPE):
 
+    # Do a preliminary read of the BPCH file to construct a map of its
+    # contents. This doesn't read anything into memory, and should be
+    # very fast
+    # filetype, filetitle, datablocks = bpch.read_bpch(
+    #     filename, skip_data=True,
+    #     diaginfo_file=diaginfo_file, tracerinfo_file=tracerinfo_file
+    # )
+    # bpch_contents = _get_bpch_contents(datablocks)
+
     store = _BPCHDataStore(
         filename, tracerinfo_file=tracerinfo_file,
         diaginfo_file=diaginfo_file, endian=endian,
@@ -58,6 +67,51 @@ def open_bpchdataset(filename,
     # ds = xr.decode_cf(ds)
 
     return ds
+
+
+# def _get_bpch_contents(datablocks):
+#     """ Generate sufficient information to create separate Datasets for each
+#     field and timeslice in a given BPCH output dataset. """
+#
+#     for datablock in datablocks:
+#
+#         vname = datablock['category'] + "_" + datablock['name']
+#
+#         # Create a new variable if it's not already present
+#         tracerinfo = datablock['tracerinfo']
+#         attrs = dict(
+#             long_name=tracerinfo['full_name'],
+#             moulecular_weight=tracerinfo['molecular_weight'],
+#             scale=tracerinfo['scale'],
+#             units=tracerinfo['unit']
+#         )
+#
+#         shape, origin, times = \
+#             datablock['shape'], datablock['origin'], datablock['times']
+#
+#         if len(shape) == 2:
+#             dims = ['time', 'lon', 'lat', ]
+#         else:
+#             dims = ['time', 'lon', 'lat', 'lev', ]
+#
+#         # Don't immediately load... let it be lazy!
+#         # # TODO: using 'chunks' parameter, wrap this in a dask. delayed() call
+#         # if vname in self._variables:
+#         #     v = self._variables[vname]
+#         #     data = np.concatenate(
+#         #         [v.data, datablock['data'][np.newaxis, ...]], axis=0
+#         #     )
+#         # else:
+#         # TODO: Need a better way to concatenate the variable data; doing it this way incurs a huge penalty because everything has to be read from the disk.
+#         data = datablock['data'][None]
+#
+#         var = xr.Variable(dims, data, attrs)
+#         # if vname in self._variables:
+#         #     var = self._variables[vname].concat(var)
+#
+#         self._variables[vname] = var
+
+
 
 
 class _BPCHDataStore(xr.backends.common.AbstractDataStore):
@@ -95,71 +149,32 @@ class _BPCHDataStore(xr.backends.common.AbstractDataStore):
         # when xarray needs to access the data
         self._variables = xr.core.pycompat.OrderedDict()
         self._attributes = xr.core.pycompat.OrderedDict()
-        self._dimensions = []
+        self._dimensions = [d for d in DIMENSIONS]
 
         # Read the BPCH file to figure out what's in it
-        filetype, filetitle, datablocks = bpch.read_bpch(
-            filename, endian=endian, mode='rb',
+        read_bpch_kws = dict(
+            endian=endian, mode='rb',
             diaginfo_file=diaginfo_file, tracerinfo_file=tracerinfo_file,
+            dummy_prefix_dims=1, concat_blocks=True,
+        )
+        header_info = bpch.read_bpch(
+            filename, first_header=True, **read_bpch_kws
+        )
+        filetype, filetitle, datablocks = bpch.read_bpch(
+            filename, **read_bpch_kws
         )
 
         # Get the list of variables in the file and load all the data:
         dim_coords = {}
-        times = []
-        time_bnds = []
-        ctm_grid = None
+        self._times = []
+        self._time_bnds = []
+        ctm_grid = grid.CTMGrid.from_model(
+            header_info['modelname'], resolution=header_info['resolution']
+        )
 
-        for datablock in datablocks:
-            # if datablock['name'] != 'O3': continue
-
-            # Record times for constructing coordinates later
-            t0, t1 = datablock['times']
-            if t0 not in times:
-                times.append(t0)
-                time_bnds.append([t0, t1])
-
-            modelname = str(datablock['modelname'], 'utf-8')
-
-            # Only compute the CTM grid once
-            if ctm_grid is None:
-                ctm_grid = grid.CTMGrid.from_model(
-                    modelname, resolution=datablock['resolution']
-                )
-            # dims = _get_datablock_dims(datablock)
-
-            if len(datablock['shape']) == 2:
-                dims = ['time', 'lon', 'lat', ]
-            else:
-                dims = ['time', 'lon', 'lat', 'lev', ]
-            for d in dims:
-                if d not in self._dimensions:
-                    self._dimensions.append(d)
-
-            vname = datablock['category'] + "_" + datablock['name']
-            print(vname)
-            # Create a new variable if it's not already present
-            tracerinfo = datablock['tracerinfo']
-            attrs = dict(
-                long_name=tracerinfo['full_name'],
-                moulecular_weight=tracerinfo['molecular_weight'],
-                scale=tracerinfo['scale'],
-                units=tracerinfo['unit']
-            )
-            # Don't immediately load... let it be lazy!
-            # # TODO: using 'chunks' parameter, wrap this in a dask. delayed() call
-            # if vname in self._variables:
-            #     v = self._variables[vname]
-            #     data = np.concatenate(
-            #         [v.data, datablock['data'][np.newaxis, ...]], axis=0
-            #     )
-            # else:
-            # TODO: Need a better way to concatenate the variable data; doing it this way incurs a huge penalty because everything has to be read from the disk.
-            data = datablock['data']
-
+        for vname, data, dims, attrs in self.load_from_datablocks(datablocks):
+            print(vname, dims)
             var = xr.Variable(dims, data, attrs)
-            # if vname in self._variables:
-            #     var = self._variables[vname].concat(var)
-
             self._variables[vname] = var
 
         # Create the dimension variables; we have a lot of options
@@ -169,6 +184,7 @@ class _BPCHDataStore(xr.backends.common.AbstractDataStore):
         # self._variables['Ap'] =
         # self._variables['Bp'] =
         # self._variables['altitude'] =
+        print(ctm_grid)
         if ctm_grid.eta_centers is not None:
             lev_vals = ctm_grid.eta_centers
             lev_attrs = {
@@ -198,13 +214,57 @@ class _BPCHDataStore(xr.backends.common.AbstractDataStore):
         # Time dimensions
         # TODO: Time units?
         self._variables['time'] = xr.Variable(
-            ['time', ], times,
+            ['time', ], self._times,
             {'bounds': 'time_bnds'}
         )
         self._variables['time_bnds'] = xr.Variable(
-            ['time', 'nv'], time_bnds, {}
+            ['time', 'nv'], self._time_bnds, {}
         )
 
+
+    def load_from_datablocks(self, datablocks):
+
+        for datablock in datablocks:
+            vname = datablock['category'] + "_" + datablock['name']
+            # if not vname.endswith('O3'): continue
+
+            # Record times for constructing coordinates later
+            db_times = datablock['times']
+            if not self._times:
+                self._time_bnds = db_times
+                self._times = [tb[0] for tb in db_times]
+
+            # Increment the shape check here since we're adding a dummy 'time'
+            # dimension at the front
+            if len(datablock['shape']) == 3:
+                dims = ['lon', 'lat', ]
+            else:
+                dims = ['lon', 'lat', 'lev', ]
+            dims = ['time', ] + dims
+
+            print(vname)
+            # Create a new variable if it's not already present
+            tracerinfo = datablock['tracerinfo']
+            attrs = dict(
+                long_name=tracerinfo['full_name'],
+                moulecular_weight=tracerinfo['molecular_weight'],
+                scale=tracerinfo['scale'],
+                units=tracerinfo['unit']
+            )
+            # Don't immediately load... let it be lazy!
+            # # # TODO: using 'chunks' parameter, wrap this in a dask. delayed() call
+            # if vname in self._variables:
+            #     v = self._variables[vname]
+            #     new_data = datablock['data']
+            #     data = np.concatenate(
+            #         [v.data, new_data], axis=0
+            #     )
+            # else:
+            # TODO: Need a better way to concatenate the variable data; doing it this way incurs a huge penalty because everything has to be read from the disk.
+            data = datablock['data']
+            print(datablock['data'].file_positions)
+
+            yield vname, data, dims, attrs
 
 
     def _get_datablock_dims(datablock):
