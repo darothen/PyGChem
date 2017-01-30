@@ -159,6 +159,10 @@ def read_bpch(filename, mode='rb', skip_data=True,
             category_name, number, unit, tau0, tau1, reserved = line[:6]
             dim0, dim1, dim2, dim3, dim4, dim5, skip = line[6:]
 
+            # Decode byte-strings to utf-8
+            category_name = str(category_name, 'utf-8')
+            unit = str(unit, 'utf-8')
+
             # get additional metadata from tracerinfo / diaginfo
             try:
                 cat = ctm_info.categories.select_item(category_name.strip())
