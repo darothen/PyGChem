@@ -83,13 +83,30 @@ class BPCHDataProxy(object):
             data = np.concatenate(all_data, axis=self.concat_axis)
         return data * self.scale_factor
 
+    def load_memmap(self):
+        """ Create a memory-map into the file proxied by this instance.
+
+        note: we offset the file position by 4 bytes to account for the
+              prefix that that the Fortran write statement prepends to an
+              output line.
+        """
+        print(self.shape)
+        all_data = np.empty(self.shape)
+        for i, pos in enumerate(self.file_positions):
+            data = np.memmap(self.path, mode='r',
+                             dtype=np.dtype(self.endian+'f4'),
+                             offset=pos+4, shape=self._shape, order='F')
+            all_data[i,...] = data
+        return all_data * self.scale_factor
+
+
     def __getitem__(self, keys):
         return self.data[keys]
 
     def __repr__(self):
         fmt = '<{self.__class__.__name__} shape={self.shape}' \
               ' dtype={self.dtype!r} path={self.path!r}' \
-              ' file_position={self.file_position}' \
+              ' file_positions={self.file_positions}' \
               ' scale_factor={self.scale_factor}>'
         return fmt.format(self=self)
 
