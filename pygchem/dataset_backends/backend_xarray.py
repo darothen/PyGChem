@@ -12,9 +12,11 @@ from xarray.core.pycompat import OrderedDict
 from .. import grid
 from .. diagnostics import CTMDiagnosticInfo
 from .. io import bpch
+from .. tools import ctm2cf
 
 DEFAULT_DTYPE = np.dtype('f4')
 
+#: Hard-coded dimension variables to use with any Dataset read in
 DIMENSIONS = OrderedDict(
     lon=dict(dims=['lon', ],
              attrs={
@@ -30,7 +32,6 @@ DIMENSIONS = OrderedDict(
     ),
     lev=dict(dims=['lev', ],
              attrs={
-                'standard_name': 'sigma',
                 'axis': 'Z',
              }
     ),
@@ -43,7 +44,7 @@ DIMENSIONS = OrderedDict(
     nv=dict(),
 )
 
-def open_bpchdataset(filename,
+def open_bpchdataset(filename, fields=[], fix_cf=True,
                      tracerinfo_file='tracerinfo.dat',
                      diaginfo_file='diaginfo.dat',
                      endian=">", default_dtype=DEFAULT_DTYPE):
@@ -58,10 +59,12 @@ def open_bpchdataset(filename,
     # bpch_contents = _get_bpch_contents(datablocks)
 
     store = _BPCHDataStore(
-        filename, tracerinfo_file=tracerinfo_file,
+        filename, fields=fields, fix_cf=fix_cf,
+        tracerinfo_file=tracerinfo_file,
         diaginfo_file=diaginfo_file, endian=endian,
         default_dtype=default_dtype
     )
+
     ds = xr.Dataset.load_store(store)
 
     # ds = xr.decode_cf(ds)
@@ -117,7 +120,7 @@ def open_bpchdataset(filename,
 class _BPCHDataStore(xr.backends.common.AbstractDataStore):
     """ Backend for representing bpch binary output. """
 
-    def __init__(self, filename,
+    def __init__(self, filename, fields=[], fix_cf=True,
                  tracerinfo_file='', diaginfo_file='',
                  endian=">", default_dtype=DEFAULT_DTYPE):
         """
@@ -136,8 +139,9 @@ class _BPCHDataStore(xr.backends.common.AbstractDataStore):
             diaginfo_file = 'diaginfo.dat'
             if not os.path.exists(diaginfo_file):
                 diaginfo_file = ''
-        self.ctm_info = CTMDiagnosticInfo(diaginfo_file=diaginfo_file,
-                                          tracerinfo_file=tracerinfo_file)
+        self.ctm_info = CTMDiagnosticInfo(
+            diaginfo_file=diaginfo_file, tracerinfo_file=tracerinfo_file
+        )
 
         # Check endianness flag
         if endian not in ['>', '<', '=']:
@@ -172,7 +176,16 @@ class _BPCHDataStore(xr.backends.common.AbstractDataStore):
             header_info['modelname'], resolution=header_info['resolution']
         )
 
-        for vname, data, dims, attrs in self.load_from_datablocks(datablocks):
+        for vname, data, dims, attrs in self.load_from_datablocks(datablocks, fields):
+
+            # If requested, try to coerce the attributes and metadata to
+            # something a bit more CF-friendly
+            if fix_cf:
+                if 'units' in attrs:
+                    cf_units = ctm2cf.get_cfcompliant_units(attrs['units'])
+                    attrs['units'] = cf_units
+                vname = ctm2cf.get_valid_varname(vname)
+
             var = xr.Variable(dims, data, attrs)
             self._variables[vname] = var
 
@@ -219,10 +232,11 @@ class _BPCHDataStore(xr.backends.common.AbstractDataStore):
             ['time', 'nv'], self._time_bnds, {}
         )
 
-
-    def load_from_datablocks(self, datablocks):
+    def load_from_datablocks(self, datablocks, fields=[]):
 
         for datablock in datablocks:
+            name = datablock['name']
+            if fields and (name not in fields): continue
             vname = datablock['category'] + "_" + datablock['name']
             # if not vname.endswith('O3'): continue
 
