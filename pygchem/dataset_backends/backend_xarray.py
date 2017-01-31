@@ -36,10 +36,7 @@ DIMENSIONS = OrderedDict(
              }
     ),
     time=dict(dims=['time', ],
-              attrs={
-                'long_name': 'time',
-                'bounds': 'time_bnds',
-              }
+              attrs={}
     ),
     nv=dict(),
 )
@@ -226,10 +223,11 @@ class _BPCHDataStore(xr.backends.common.AbstractDataStore):
         # TODO: Time units?
         self._variables['time'] = xr.Variable(
             ['time', ], self._times,
-            {'bounds': 'time_bnds'}
+            {'bounds': 'time_bnds', 'units': ctm2cf.CTM_TIME_UNIT_STR}
         )
         self._variables['time_bnds'] = xr.Variable(
-            ['time', 'nv'], self._time_bnds, {}
+            ['time', 'nv'], self._time_bnds,
+            {'units': ctm2cf.CTM_TIME_UNIT_STR}
         )
 
     def load_from_datablocks(self, datablocks, fields=[]):
