@@ -40,12 +40,12 @@ UNITS_MAP_CTM2CF = (
     ('atoms C', 'count'),
     ('ppbC', 'ppb'),        # prefix or suffix required (nb. of carbon atoms)
     ('kg C', 'kg'),         # prefix or suffix required (?)
-    ('molC', 'mol'),        # prefix or suffix required ?     TODO: 
+    ('molC', 'mol'),        # prefix or suffix required ?     TODO:
     ('gC', 'g'),            # prefix or suffix required ?
     ('kg S', 'kg'),
     ('kg OH', 'kg'),
     ('kg NO3', 'kg'),
-    ('kg H2O2', 'kg'), 
+    ('kg H2O2', 'kg'),
     ('unitless', '1'),
     ('unitles', '1'),       # typo found in tracerinfo or diaginfo
     ('v/v', '1'),
@@ -60,14 +60,14 @@ UNITS_MAP_CTM2CF = (
     ('deg C', 'Celsius'),
     ('C', 'Celsius'),
     ('mm/da', 'mm/day'),    # typo in tracerinfo.dat 4/17/12
-    ('kg/m2/', 'kg/m2'))    # ?? (tracerinfo.dat 6801 (line 1075)             
+    ('kg/m2/', 'kg/m2'))    # ?? (tracerinfo.dat 6801 (line 1075)
 
 
 def get_cfcompliant_units(units, prefix='', suffix=''):
     """
     Get equivalent units that are compatible with the udunits2 library
     (thus CF-compliant).
-    
+
     Parameters
     ----------
     units : string
@@ -78,21 +78,21 @@ def get_cfcompliant_units(units, prefix='', suffix=''):
     suffix : string
         Will be added at the end of the returned string
         (must be a valid udunits2 expression).
-    
+
     Returns
     -------
     A string representation of the conforming units.
-    
+
     References
     ----------
     The udunits2 package : http://www.unidata.ucar.edu/software/udunits/
-    
+
     Notes
     -----
     This function only relies on the table stored in :attr:`UNITS_MAP_CTM2CF`.
     Therefore, the units string returned by this function is not certified to
     be compatible with udunits2.
-    
+
     Examples
     --------
     >>> get_cfcompliant_units('molec/cm2')
@@ -101,13 +101,13 @@ def get_cfcompliant_units(units, prefix='', suffix=''):
     '1'
     >>> get_cfcompliant_units('ppbC', prefix='3')
     '3ppb
-    
+
     """
     compliant_units = units
-    
+
     for gcunits, udunits in UNITS_MAP_CTM2CF:
-        compliant_units = string.replace(compliant_units, gcunits, udunits)
-    
+        compliant_units = str.replace(compliant_units, gcunits, udunits)
+
     return prefix + compliant_units + suffix
 
 
