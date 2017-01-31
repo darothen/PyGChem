@@ -41,10 +41,48 @@ DIMENSIONS = OrderedDict(
     nv=dict(),
 )
 
-def open_bpchdataset(filename, fields=[], fix_cf=True,
+#: CF/COARDS recommended dimension order; non-spatiotemporal dimensions
+#: should precede these.
+DIM_ORDER_PRIORITY = ['time', 'lev', 'lat', 'lon']
+
+def open_bpchdataset(filename, fields=[], fix_cf=True, fix_dims=False,
                      tracerinfo_file='tracerinfo.dat',
                      diaginfo_file='diaginfo.dat',
-                     endian=">", default_dtype=DEFAULT_DTYPE):
+                     endian=">", default_dtype=DEFAULT_DTYPE, chunks=None):
+    """ Open a GEOS-Chem BPCH file output as an xarray Dataset.
+
+    Parameters
+    ----------
+    filename : string
+        Path to the output file to read in.
+    {tracerinfo,diaginfo}_file : string, optional
+        Path to the metadata "info" .dat files which are used to decipher
+        the metadata corresponding to each variable in the output dataset.
+        If not provided, will look for them in the current directory or
+        fall back on a generic set.
+    fields : list, optional
+        List of a subset of variable names to return. This can substantially
+        improve read performance. Note that the field here is just the tracer
+        name - not the category, e.g. 'O3' instead of 'IJ-AVG-$_O3'.
+    fix_cf : logical, optional
+        Conform units, standard names, and other metadata to CF standards when
+        reading in data.
+    fix_dims : logical, optional
+        Transpose dimensions on disk to (T, Z, Y, X) (CF-compliant) order when
+        reading in data.
+    endian : {'=', '>', '<'}, optional
+        Endianness of file on disk. By default, "big endian" (">") is assumed.
+    default_dtype : numpy.dtype, optional
+        Default datatype for variables encoded in file on disk (single-precision
+        float by default).
+
+    Returns
+    -------
+    ds : xarray.Dataset
+        Dataset containing the requested fields (or the entire file), with data
+        contained in proxy containers for access later.
+
+    """
 
     # Do a preliminary read of the BPCH file to construct a map of its
     # contents. This doesn't read anything into memory, and should be
@@ -56,68 +94,24 @@ def open_bpchdataset(filename, fields=[], fix_cf=True,
     # bpch_contents = _get_bpch_contents(datablocks)
 
     store = _BPCHDataStore(
-        filename, fields=fields, fix_cf=fix_cf,
+        filename, fields=fields, fix_cf=fix_cf, fix_dims=fix_dims,
         tracerinfo_file=tracerinfo_file,
         diaginfo_file=diaginfo_file, endian=endian,
-        default_dtype=default_dtype
+        default_dtype=default_dtype,
     )
 
     ds = xr.Dataset.load_store(store)
 
-    # ds = xr.decode_cf(ds)
+    # To immediately load the data from the BPCHDataProxy paylods, need
+    # to execute ds.data_vars for some reason...
 
     return ds
-
-
-# def _get_bpch_contents(datablocks):
-#     """ Generate sufficient information to create separate Datasets for each
-#     field and timeslice in a given BPCH output dataset. """
-#
-#     for datablock in datablocks:
-#
-#         vname = datablock['category'] + "_" + datablock['name']
-#
-#         # Create a new variable if it's not already present
-#         tracerinfo = datablock['tracerinfo']
-#         attrs = dict(
-#             long_name=tracerinfo['full_name'],
-#             moulecular_weight=tracerinfo['molecular_weight'],
-#             scale=tracerinfo['scale'],
-#             units=tracerinfo['unit']
-#         )
-#
-#         shape, origin, times = \
-#             datablock['shape'], datablock['origin'], datablock['times']
-#
-#         if len(shape) == 2:
-#             dims = ['time', 'lon', 'lat', ]
-#         else:
-#             dims = ['time', 'lon', 'lat', 'lev', ]
-#
-#         # Don't immediately load... let it be lazy!
-#         # # TODO: using 'chunks' parameter, wrap this in a dask. delayed() call
-#         # if vname in self._variables:
-#         #     v = self._variables[vname]
-#         #     data = np.concatenate(
-#         #         [v.data, datablock['data'][np.newaxis, ...]], axis=0
-#         #     )
-#         # else:
-#         # TODO: Need a better way to concatenate the variable data; doing it this way incurs a huge penalty because everything has to be read from the disk.
-#         data = datablock['data'][None]
-#
-#         var = xr.Variable(dims, data, attrs)
-#         # if vname in self._variables:
-#         #     var = self._variables[vname].concat(var)
-#
-#         self._variables[vname] = var
-
-
 
 
 class _BPCHDataStore(xr.backends.common.AbstractDataStore):
     """ Backend for representing bpch binary output. """
 
-    def __init__(self, filename, fields=[], fix_cf=True,
+    def __init__(self, filename, fields=[], fix_cf=True, fix_dims=False,
                  tracerinfo_file='', diaginfo_file='',
                  endian=">", default_dtype=DEFAULT_DTYPE):
         """
@@ -156,7 +150,7 @@ class _BPCHDataStore(xr.backends.common.AbstractDataStore):
         read_bpch_kws = dict(
             endian=endian, mode='rb',
             diaginfo_file=diaginfo_file, tracerinfo_file=tracerinfo_file,
-            dummy_prefix_dims=1, concat_blocks=True,
+            dummy_prefix_dims=1, concat_blocks=True
         )
         header_info = bpch.read_bpch(
             filename, first_header=True, **read_bpch_kws
@@ -183,7 +177,19 @@ class _BPCHDataStore(xr.backends.common.AbstractDataStore):
                     attrs['units'] = cf_units
                 vname = ctm2cf.get_valid_varname(vname)
 
+            # data = data.load_memmap()
             var = xr.Variable(dims, data, attrs)
+
+            # Shuffle dims for CF/COARDS compliance if requested
+            # TODO: For this to work, we have to force a load of the data.
+            #       Is there a way to re-write BPCHDataProxy so that that's not
+            #       necessary?
+            #       Actually, we can't even force a load becase var.data is a
+            #       numpy.ndarray. Weird.
+            if fix_dims:
+                target_dims = [d for d in DIM_ORDER_PRIORITY if d in dims]
+                var = var.transpose(*target_dims)
+
             self._variables[vname] = var
 
         # Create the dimension variables; we have a lot of options
@@ -231,6 +237,8 @@ class _BPCHDataStore(xr.backends.common.AbstractDataStore):
         )
 
     def load_from_datablocks(self, datablocks, fields=[]):
+        """ Process datablocks returned from read_bpch method for use
+        in constructing xarray objects. """
 
         for datablock in datablocks:
             name = datablock['name']
@@ -267,7 +275,7 @@ class _BPCHDataStore(xr.backends.common.AbstractDataStore):
 
     def _get_datablock_dims(datablock):
         """
-        Compute the grid diemsnsions for a given datablock.
+        Compute the grid dimensions for a given datablock.
 
         This is mostly culled from backend_iris._get_datablock_dim_coords
         and irisutil.coord_from_grid, with some modifications for
@@ -312,4 +320,5 @@ class _BPCHDataStore(xr.backends.common.AbstractDataStore):
         return self._dimensions
 
     def close(self):
-        pass
+        for var in list(self._variables):
+            del self._variables['var']
