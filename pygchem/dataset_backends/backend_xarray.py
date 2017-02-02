@@ -8,6 +8,8 @@ import numpy as np
 import xarray as xr
 
 from xarray.core.pycompat import OrderedDict
+from xarray.core.utils import Frozen, FrozenOrderedDict, NDArrayMixin
+from xarray.core import indexing
 
 from .. import grid
 from .. diagnostics import CTMDiagnosticInfo
@@ -46,6 +48,31 @@ DIMENSIONS = OrderedDict(
 #: CF/COARDS recommended dimension order; non-spatiotemporal dimensions
 #: should precede these.
 DIM_ORDER_PRIORITY = ['time', 'lev', 'lat', 'lon']
+
+
+class BPCHDataProxyWrapper(NDArrayMixin):
+    # Mostly following the template of ScipyArrayWrapper
+    # https://github.com/pydata/xarray/blob/master/xarray/backends/scipy_.py
+    # and NioArrayWrapper
+    # https://github.com/pydata/xarray/blob/master/xarray/backends/pynio_.py
+
+    def __init__(self, array):
+        self._array = array
+
+    @property
+    def array(self):
+        return self._array.data
+
+    @property
+    def dtype(self):
+        return np.dtype(self.array.dtype.kind + str(self.array.dtype.itemsize))
+
+    # def __getitem__(self, key):
+    #     data = super(BPCHDataProxyWrapper, self).__getitem__(key)
+    #     data = np.array(data, dtype=self.dtype, copy=True)
+    #     return data
+
+
 
 def open_bpchdataset(filename, fields=[], fix_cf=True, fix_dims=False,
                      tracerinfo_file='tracerinfo.dat',
@@ -181,6 +208,8 @@ class _BPCHDataStore(xr.backends.common.AbstractDataStore):
                 vname = ctm2cf.get_valid_varname(vname)
 
             # data = data.load_memmap()
+            # TODO: Explore using a wrapper with an NDArrayMixin, but I don't necessarily think it's useful or helpful here.
+            # data = BPCHDataProxyWrapper(data)
             var = xr.Variable(dims, data, attrs)
 
             # Shuffle dims for CF/COARDS compliance if requested
@@ -312,16 +341,15 @@ class _BPCHDataStore(xr.backends.common.AbstractDataStore):
 
         return dims
 
-
     def get_variables(self):
         return self._variables
 
     def get_attrs(self):
-        return self._attributes
+        return Frozen(self._attributes)
 
     def get_dimensions(self):
-        return self._dimensions
+        return Frozen(self._dimensions)
 
-    def close(self):
-        for var in list(self._variables):
-            del self._variables['var']
+    # def close(self):
+    #     for var in list(self._variables):
+    #         del self._variables['var']

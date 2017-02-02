@@ -23,6 +23,8 @@ from builtins import object
 import os
 
 import numpy as np
+from dask import delayed
+import dask.array as dsa
 
 from pygchem.diagnostics import CTMDiagnosticInfo
 from pygchem.tools import timeutil
@@ -39,10 +41,12 @@ class BPCHDataProxy(object):
     """A reference to the data payload of a single BPCH file datablock."""
 
     __slots__ = ('_shape', 'dtype', 'path', 'endian', 'file_positions',
-                 'concat_axis', 'scale_factor', 'fill_value', '_data')
+                 'concat_axis', 'scale_factor', 'fill_value', 'maskandscale', 'memmap', '_data')
 
+    # TODO: Re-factor assuming "concat_axis" is just a prepend option
     def __init__(self, shape, dtype, path, endian, file_positions,
-                 concat_axis, scale_factor, fill_value, memmap=True):
+                 concat_axis, scale_factor, fill_value, maskandscale,
+                 memmap=True):
         self._shape = shape
         self.dtype = dtype
         self.path = path
@@ -51,6 +55,8 @@ class BPCHDataProxy(object):
         self.file_positions = file_positions
         self.concat_axis = concat_axis
         self.scale_factor = scale_factor
+        self.maskandscale = maskandscale
+        self.memmap = memmap
         self._data = None
 
     @property
@@ -69,8 +75,14 @@ class BPCHDataProxy(object):
     @property
     def data(self):
         if self._data is None:
-            self._data = self.load()
+            if self.memmap:
+                self._data = self.load_memmap()
+            else:
+                self._data = self.load()
         return self._data
+
+    def array(self):
+        return self.data
 
     def load(self):
         with uff.FortranFile(self.path, 'rb', self.endian) as bpch_file:
@@ -81,7 +93,7 @@ class BPCHDataProxy(object):
                 data = data.reshape(self._shape, order='F')
                 all_data.append(data)
             data = np.concatenate(all_data, axis=self.concat_axis)
-        return data * self.scale_factor
+        return data# * self.scale_factor
 
     def load_memmap(self):
         """ Create a memory-map into the file proxied by this instance.
@@ -90,18 +102,32 @@ class BPCHDataProxy(object):
               prefix that that the Fortran write statement prepends to an
               output line.
         """
-        print(self.shape)
-        all_data = np.empty(self.shape)
+        # print("LOAD_MEMMAP", self.shape)
+        # all_data = np.empty(self.shape)
+        all_data = []
         for i, pos in enumerate(self.file_positions):
-            data = np.memmap(self.path, mode='r',
-                             dtype=np.dtype(self.endian+'f4'),
-                             offset=pos+4, shape=self._shape, order='F')
-            all_data[i,...] = data
-        return all_data * self.scale_factor
+            data = delayed(np.memmap)(
+                self.path, mode='r',
+                dtype=np.dtype(self.endian+'f4'),
+                offset=pos+4, shape=self._shape, order='F'
+            )
+            all_data.append(dsa.from_delayed(data, self._shape, self.dtype))
+        all_data = dsa.concatenate(all_data)
+        return all_data# * self.scale_factor
 
 
     def __getitem__(self, keys):
-        return self.data[keys]
+
+        if not self.maskandscale:
+            return self.data[keys]
+
+        data = self.data[keys].copy()
+        if self.scale_factor is not None:
+            data = data * self.scale_factor
+
+        return data
+
+
 
     def __repr__(self):
         fmt = '<{self.__class__.__name__} shape={self.shape}' \
@@ -121,6 +147,7 @@ class BPCHDataProxy(object):
 def read_bpch(filename, mode='rb', skip_data=True,
               diaginfo_file='', tracerinfo_file='',
               dummy_prefix_dims=0, concat_blocks=False, first_header=False,
+              maskandscale=True,
               **kwargs):
     """
     Read the binary punch file v2 format.
@@ -150,6 +177,8 @@ def read_bpch(filename, mode='rb', skip_data=True,
         read from disk.
     first_header : bool
         if True, only return the header info from the first datablock.
+    maskandscale: bool
+        if True, return scaled values from the BPCH file
     **kwargs
         extra parameters passed to :class:`pygchem.utils.uff.FortranFile`
         (e.g., `endian`).
@@ -258,7 +287,7 @@ def read_bpch(filename, mode='rb', skip_data=True,
                 else:
                     data = BPCHDataProxy(data_shape, np.dtype('f'),
                                          from_file, bpch_file.endian,
-                                         [file_position, ], concat_axis, diag['scale'], np.nan)
+                                         [file_position, ], concat_axis, diag['scale'], np.nan, maskandscale)
             else:
                 # TODO: Converting the BPCHDataProxy to record multiple file
                 #       positions breaks the symmetry with load-on-read below,
