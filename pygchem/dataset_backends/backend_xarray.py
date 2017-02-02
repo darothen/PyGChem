@@ -208,8 +208,8 @@ class _BPCHDataStore(xr.backends.common.AbstractDataStore):
                 vname = ctm2cf.get_valid_varname(vname)
 
             # data = data.load_memmap()
-            # TODO: Explore using a wrapper with an NDArrayMixin, but I don't necessarily think it's useful or helpful here.
-            # data = BPCHDataProxyWrapper(data)
+            # TODO: Explore using a wrapper with an NDArrayMixin; if you don't do this, then dask won't work correctly (it won't promote the data to an array from a BPCHDataProxy). I'm not sure why.
+            data = BPCHDataProxyWrapper(data)
             var = xr.Variable(dims, data, attrs)
 
             # Shuffle dims for CF/COARDS compliance if requested

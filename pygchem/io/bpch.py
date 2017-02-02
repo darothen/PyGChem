@@ -93,7 +93,11 @@ class BPCHDataProxy(object):
                 data = data.reshape(self._shape, order='F')
                 all_data.append(data)
             data = np.concatenate(all_data, axis=self.concat_axis)
-        return data# * self.scale_factor
+
+        if self.maskandscale and (self.scale_factor is not None):
+            data = data * self.scale_factor
+        return data
+
 
     def load_memmap(self):
         """ Create a memory-map into the file proxied by this instance.
@@ -113,17 +117,15 @@ class BPCHDataProxy(object):
             )
             all_data.append(dsa.from_delayed(data, self._shape, self.dtype))
         all_data = dsa.concatenate(all_data)
-        return all_data# * self.scale_factor
+
+        if self.maskandscale and (self.scale_factor is not None):
+            all_data = all_data * self.scale_factor
+        return all_data
 
 
     def __getitem__(self, keys):
 
-        if not self.maskandscale:
-            return self.data[keys]
-
-        data = self.data[keys].copy()
-        if self.scale_factor is not None:
-            data = data * self.scale_factor
+        return self.data[keys]
 
         return data
 
