@@ -22,7 +22,6 @@ from builtins import range
 from past.utils import old_div
 import collections
 import warnings
-from types import StringTypes
 
 import numpy as np
 import biggus
@@ -41,6 +40,10 @@ from pygchem.io import bpch
 from pygchem.tools import ctm2cf, timeutil
 from pygchem.utils import exceptions
 
+try:
+    basstring
+except NameError:
+    basestring = str
 
 
 # -----------------------------------------------------------------------------
@@ -488,7 +491,8 @@ def coord_from_grid(ctm_grid, coord=('longitude', 'latitude', 'levels'),
     vcoord_names = ('levels', 'sigma', 'eta', 'pressure', 'altitude')
     valid_coord_names = vcoord_names + ('longitude', 'latitude')
 
-    if isinstance(coord, StringTypes):
+
+    if isinstance(coord, basestring):
         coord = [coord]
     for c in coord:
         if c not in valid_coord_names:

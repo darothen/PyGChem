@@ -63,7 +63,7 @@ class BPCHDataProxy(object):
 
     @property
     def shape(self):
-        if self.concat_axis is None:
+        if (self.concat_axis is None) or (len(self.file_positions) == 1):
             return self._shape
         else:
             shape_bits = list(self._shape)
@@ -78,10 +78,10 @@ class BPCHDataProxy(object):
     def data(self):
         if self._data is None:
             if self.memmap:
-                print("LOAD (memmap)")
+                # print("LOAD (memmap)")
                 self._data = self.load_memmap()
             else:
-                print("LOAD")
+                # print("LOAD")
                 self._data = self.load()
         return self._data
 
@@ -134,7 +134,7 @@ class BPCHDataProxy(object):
         for i, pos in enumerate(self.file_positions):
 
             if self.use_dask:
-                print("   DASK")
+                # print("   DASK")
                 data = delayed(np.memmap)(
                     self.path, mode='r',
                     dtype=np.dtype(self.endian+'f4'),
@@ -148,14 +148,19 @@ class BPCHDataProxy(object):
                                  offset=pos+4, shape=self._shape, order='F')
             all_data.append(data)
 
-
-        if self.use_dask:
-            data = dsa.concatenate(all_data, axis=self.concat_axis)
+        if len(all_data) > 1:
+            if self.use_dask:
+                data = dsa.concatenate(all_data, axis=self.concat_axis)
+            else:
+                data = np.concatenate(all_data, axis=self.concat_axis)
         else:
-            data = np.concatenate(all_data, axis=self.concat_axis)
+            # In this case, the data is time-invariant and we should prefer
+            # to squeeze the leading dimension
+            data = all_data[0][0]
 
         if self.maskandscale and (self.scale_factor is not None):
             data = data * self.scale_factor
+
         return data
 
 

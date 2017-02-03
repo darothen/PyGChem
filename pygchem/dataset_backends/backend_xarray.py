@@ -6,6 +6,7 @@ from __future__ import print_function, division
 import os
 import numpy as np
 import xarray as xr
+import warnings
 
 from xarray.core.pycompat import OrderedDict
 from xarray.core.utils import Frozen, FrozenOrderedDict, NDArrayMixin
@@ -15,35 +16,30 @@ from .. import grid
 from .. diagnostics import CTMDiagnosticInfo
 from .. io import bpch
 
-from .. tools import ctm2cf
+from .. tools import ctm2cf, gridspec
 
 DEFAULT_DTYPE = np.dtype('f4')
 
 #: Hard-coded dimension variables to use with any Dataset read in
-DIMENSIONS = OrderedDict(
-    lon=dict(dims=['lon', ],
-             attrs={
-                'standard_name': 'longitude',
-                'axis': 'X',
-            }
+BASE_DIMENSIONS =   OrderedDict(
+    lon=dict(
+        dims=['lon', ],
+        attrs={
+            'standard_name': 'longitude',
+            'axis': 'X',
+        }
     ),
-    lat=dict(dims=['lat', ],
-             attrs={
-                'standard_name': 'latitude',
-                'axis': 'Y',
-             },
+    lat=dict(
+        dims=['lat', ],
+        attrs={
+            'standard_name': 'latitude',
+            'axis': 'Y',
+        },
     ),
-    lev=dict(dims=['lev', ],
-             attrs={
-                'axis': 'Z',
-             }
-    ),
-    time=dict(dims=['time', ],
-              attrs={}
-
-    ),
-    nv=dict(),
+    time=dict(dims=['time', ], attrs={}),
+    nv=dict(dims=['nv', ], attrs={}),
 )
+
 
 #: CF/COARDS recommended dimension order; non-spatiotemporal dimensions
 #: should precede these.
@@ -178,7 +174,7 @@ class _BPCHDataStore(xr.backends.common.AbstractDataStore):
         # when xarray needs to access the data
         self._variables = xr.core.pycompat.OrderedDict()
         self._attributes = xr.core.pycompat.OrderedDict()
-        self._dimensions = [d for d in DIMENSIONS]
+        self._dimensions = [d for d in BASE_DIMENSIONS]
 
         # Read the BPCH file to figure out what's in it
         read_bpch_kws = dict(
@@ -205,8 +201,19 @@ class _BPCHDataStore(xr.backends.common.AbstractDataStore):
         dim_coords = {}
         self._times = []
         self._time_bnds = []
-        ctm_grid = grid.CTMGrid.from_model(
+        self.ctm_grid = grid.CTMGrid.from_model(
             self.modelname, resolution=self.resolution
+        )
+
+        # Add vertical dimensions
+        self._dimensions.append(
+            dict(dims=['lev', ], attrs={'axis': 'Z'})
+        )
+        self._dimensions.append(
+            dict(dims=['lev_trop', ], attrs={'axis': 'Z'})
+        )
+        self._dimensions.append(
+            dict(dims=['lev_edge', ], attrs={'axis': 'Z'})
         )
 
         for vname, data, dims, attrs in self.load_from_datablocks(datablocks, fields):
@@ -243,16 +250,16 @@ class _BPCHDataStore(xr.backends.common.AbstractDataStore):
         # self._variables['Ap'] =
         # self._variables['Bp'] =
         # self._variables['altitude'] =
-        if ctm_grid.eta_centers is not None:
-            lev_vals = ctm_grid.eta_centers
+        if self.ctm_grid.eta_centers is not None:
+            lev_vals = self.ctm_grid.eta_centers
             lev_attrs = {
                 'standard_name': 'atmosphere_hybrid_sigma_pressure_coordinate',
                 'axis': 'Z'
             }
         else:
-            lev_vals = ctm_grid.sigma_centers
+            lev_vals = self.ctm_grid.sigma_centers
             lev_attrs = {
-                'standard_name': 'atmosphere_sigma_coordinate',
+                'standard_name': 'atmosphere_hybrid_sigma_pressure_coordinate',
                 'axis': 'Z'
             }
         self._variables['lev'] = xr.Variable(['lev', ], lev_vals, lev_attrs)
@@ -260,11 +267,11 @@ class _BPCHDataStore(xr.backends.common.AbstractDataStore):
         # Latitude / Longitude
         # TODO: Add lon/lat bounds
         self._variables['lon'] = xr.Variable(
-            ['lon'], ctm_grid.lonlat_centers[0],
+            ['lon'], self.ctm_grid.lonlat_centers[0],
             {'long_name': 'longitude', 'units': 'degrees_east'}
         )
         self._variables['lat'] = xr.Variable(
-            ['lat'], ctm_grid.lonlat_centers[1],
+            ['lat'], self.ctm_grid.lonlat_centers[1],
             {'long_name': 'latitude', 'units': 'degrees_north'}
         )
         # TODO: Fix longitudes if ctm_grid.center180
@@ -281,12 +288,14 @@ class _BPCHDataStore(xr.backends.common.AbstractDataStore):
         )
         self._variables['nv'] = xr.Variable(['nv', ], [0, 1])
 
+
     def load_from_datablocks(self, datablocks, fields=[]):
         """ Process datablocks returned from read_bpch method for use
         in constructing xarray objects. """
 
         for datablock in datablocks:
             name = datablock['name']
+
             if fields and (name not in fields): continue
             vname = datablock['category'] + "_" + datablock['name']
             # if not vname.endswith('O3'): continue
@@ -299,11 +308,32 @@ class _BPCHDataStore(xr.backends.common.AbstractDataStore):
 
             # Increment the shape check here since we're adding a dummy 'time'
             # dimension at the front
-            if len(datablock['shape']) == 3:
-                dims = ['lon', 'lat', ]
-            else:
-                dims = ['lon', 'lat', 'lev', ]
-            dims = ['time', ] + dims
+            dims = ['time', 'lon', 'lat', ]
+            dshape = datablock['data'].shape
+            if len(dshape) > 3:
+                # Process the vertical coordinate. A few things can happen here:
+                # 1) We have cell-centered values on the "Nlayer" grid; we can take these variables and map them to 'lev'
+                # 2) We have edge value on an "Nlayer" + 1 grid; we can take these and use them with 'lev_edge'
+                # 3) We have troposphere values on "Ntrop"; we can take these and use them with 'lev_trop', but we won't have coordinate information yet
+                # All other cases we do not handle yet; this includes the aircraft emissions and a few other things. Note that tracer sources do not have a vertical coord to worry about!
+                nlev = dshape[-1]
+                try:
+                    if nlev == self.ctm_grid.Nlayers:
+                        dims.append('lev')
+                    elif nlev == self.ctm_grid.Nlayers + 1:
+                        dims.append('lev_edge')
+                    elif nlev == self.ctm_grid.Ntrop:
+                        dims.append('lev_trop')
+                    else:
+                        continue
+                except AttributeError:
+                    warnings.warn("Couldn't resolve attributes on ctm_grid")
+                    continue
+
+            # Is the variable time-invariant? If it is, kill the time dim.
+            # Here, we mean it only as one sample in the dataset.
+            if dshape[0] == 1:
+                del dims[0]
 
             # Create a new variable if it's not already present
             tracerinfo = datablock['tracerinfo']
@@ -314,6 +344,8 @@ class _BPCHDataStore(xr.backends.common.AbstractDataStore):
                 units=tracerinfo['unit']
             )
             data = datablock['data']
+
+            print(vname, dims, data.shape)
 
             yield vname, data, dims, attrs
 
