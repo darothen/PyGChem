@@ -70,7 +70,7 @@ class BPCHDataProxyWrapper(NDArrayMixin):
 
 
 def open_bpchdataset(filename, fields=[], categories=[],
-                     fix_cf=True, fix_dims=False,
+                     fix_cf=True, fix_dims=False, maskandscale=True,
                      tracerinfo_file='tracerinfo.dat',
                      diaginfo_file='diaginfo.dat',
                      endian=">", default_dtype=DEFAULT_DTYPE,
@@ -99,6 +99,10 @@ def open_bpchdataset(filename, fields=[], categories=[],
     fix_dims : logical, optional
         Transpose dimensions on disk to (T, Z, Y, X) (CF-compliant) order when
         reading in data.
+    maskandscale : logical, optional
+        Apply scaling to data according to metadata in BPCH file; this might
+        slow down some read operations, depending on how eagerly xarray
+        tries to evaluate operations.
     endian : {'=', '>', '<'}, optional
         Endianness of file on disk. By default, "big endian" (">") is assumed.
     default_dtype : numpy.dtype, optional
@@ -142,7 +146,7 @@ class _BPCHDataStore(xr.backends.common.AbstractDataStore):
     """ Backend for representing bpch binary output. """
 
     def __init__(self, filename, fields=[], categories=[],
-                 fix_cf=True, fix_dims=False,
+                 fix_cf=True, fix_dims=False, maskandscale=True,
                  tracerinfo_file='', diaginfo_file='',
                  endian=">", default_dtype=DEFAULT_DTYPE,
                  memmap=True, use_dask=True):
@@ -185,7 +189,7 @@ class _BPCHDataStore(xr.backends.common.AbstractDataStore):
         read_bpch_kws = dict(
             endian=endian, mode='rb',
             diaginfo_file=diaginfo_file, tracerinfo_file=tracerinfo_file,
-            dummy_prefix_dims=1, concat_blocks=True, maskandscale=False,
+            dummy_prefix_dims=1, concat_blocks=True, maskandscale=maskandscale,
             memmap=memmap, use_dask=use_dask
         )
         header_info = bpch.read_bpch(
