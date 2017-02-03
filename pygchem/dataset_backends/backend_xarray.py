@@ -67,10 +67,10 @@ class BPCHDataProxyWrapper(NDArrayMixin):
     def dtype(self):
         return np.dtype(self.array.dtype.kind + str(self.array.dtype.itemsize))
 
-    # def __getitem__(self, key):
-    #     data = super(BPCHDataProxyWrapper, self).__getitem__(key)
-    #     data = np.array(data, dtype=self.dtype, copy=True)
-    #     return data
+    def __getitem__(self, key):
+        if key == () and self.ndim == 0:
+            return self.array.get_value()
+        return self.array[key]
 
 
 
@@ -149,6 +149,8 @@ class _BPCHDataStore(xr.backends.common.AbstractDataStore):
 
         """
 
+        self._datablocks = None
+
         # Cache the diagnostic info from this simulation for accessing
         # grid and metadata information
         if not tracerinfo_file:
@@ -185,17 +187,22 @@ class _BPCHDataStore(xr.backends.common.AbstractDataStore):
         header_info = bpch.read_bpch(
             filename, first_header=True, **read_bpch_kws
         )
+        self.modelname = header_info['modelname']
+        self.resolution = header_info['resolution']
         filetype, filetitle, datablocks = bpch.read_bpch(
             filename, **read_bpch_kws
         )
+        self.filetype = filetype
+        self.filetitle = filetitle
+        self._datablocks = datablocks
+        if self._datablocks is None:
+            raise ValueError("Failed to read the input file " + filename)
 
         # Get the list of variables in the file and load all the data:
         dim_coords = {}
         self._times = []
         self._time_bnds = []
-        ctm_grid = grid.CTMGrid.from_model(
-            header_info['modelname'], resolution=header_info['resolution']
-        )
+        ctm_grid = grid.CTMGrid.from_model(modelname, resolution=resolution)
 
         for vname, data, dims, attrs in self.load_from_datablocks(datablocks, fields):
 

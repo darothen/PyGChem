@@ -40,8 +40,8 @@ ND49_TITLE = "GEOS-CHEM DIAG49 instantaneous timeseries"
 class BPCHDataProxy(object):
     """A reference to the data payload of a single BPCH file datablock."""
 
-    __slots__ = ('_shape', 'dtype', 'path', 'endian', 'file_positions',
-                 'concat_axis', 'scale_factor', 'fill_value', 'maskandscale', 'memmap', '_data')
+    # __slots__ = ('_shape', 'dtype', 'path', 'endian', 'file_positions',
+    #              'concat_axis', 'scale_factor', 'fill_value', 'maskandscale', 'memmap', '_data')
 
     # TODO: Re-factor assuming "concat_axis" is just a prepend option
     def __init__(self, shape, dtype, path, endian, file_positions,
