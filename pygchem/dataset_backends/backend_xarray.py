@@ -65,7 +65,7 @@ class BPCHDataProxyWrapper(NDArrayMixin):
 
     @property
     def dtype(self):
-        return np.dtype(self.array.dtype.kind + str(self.array.dtype.itemsize))
+        return self.array.dtype
 
     def __getitem__(self, key):
         if key == () and self.ndim == 0:
@@ -77,7 +77,8 @@ class BPCHDataProxyWrapper(NDArrayMixin):
 def open_bpchdataset(filename, fields=[], fix_cf=True, fix_dims=False,
                      tracerinfo_file='tracerinfo.dat',
                      diaginfo_file='diaginfo.dat',
-                     endian=">", default_dtype=DEFAULT_DTYPE, chunks=None):
+                     endian=">", default_dtype=DEFAULT_DTYPE,
+                     memmap=True, use_dask=True):
     """ Open a GEOS-Chem BPCH file output as an xarray Dataset.
 
     Parameters
@@ -126,7 +127,7 @@ def open_bpchdataset(filename, fields=[], fix_cf=True, fix_dims=False,
         filename, fields=fields, fix_cf=fix_cf, fix_dims=fix_dims,
         tracerinfo_file=tracerinfo_file,
         diaginfo_file=diaginfo_file, endian=endian,
-        default_dtype=default_dtype,
+        default_dtype=default_dtype, memmap=memmap, use_dask=use_dask
     )
 
     ds = xr.Dataset.load_store(store)
@@ -142,7 +143,8 @@ class _BPCHDataStore(xr.backends.common.AbstractDataStore):
 
     def __init__(self, filename, fields=[], fix_cf=True, fix_dims=False,
                  tracerinfo_file='', diaginfo_file='',
-                 endian=">", default_dtype=DEFAULT_DTYPE):
+                 endian=">", default_dtype=DEFAULT_DTYPE,
+                 memmap=True, use_dask=True):
         """
         Note that this should not be used to read in a dataset; instead, see
         open_bpchdataset.
@@ -182,7 +184,8 @@ class _BPCHDataStore(xr.backends.common.AbstractDataStore):
         read_bpch_kws = dict(
             endian=endian, mode='rb',
             diaginfo_file=diaginfo_file, tracerinfo_file=tracerinfo_file,
-            dummy_prefix_dims=1, concat_blocks=True
+            dummy_prefix_dims=1, concat_blocks=True, maskandscale=False,
+            memmap=memmap, use_dask=use_dask
         )
         header_info = bpch.read_bpch(
             filename, first_header=True, **read_bpch_kws
@@ -202,7 +205,9 @@ class _BPCHDataStore(xr.backends.common.AbstractDataStore):
         dim_coords = {}
         self._times = []
         self._time_bnds = []
-        ctm_grid = grid.CTMGrid.from_model(modelname, resolution=resolution)
+        ctm_grid = grid.CTMGrid.from_model(
+            self.modelname, resolution=self.resolution
+        )
 
         for vname, data, dims, attrs in self.load_from_datablocks(datablocks, fields):
 
@@ -274,6 +279,7 @@ class _BPCHDataStore(xr.backends.common.AbstractDataStore):
             ['time', 'nv'], self._time_bnds,
             {'units': ctm2cf.CTM_TIME_UNIT_STR}
         )
+        self._variables['nv'] = xr.Variable(['nv', ], [0, 1])
 
     def load_from_datablocks(self, datablocks, fields=[]):
         """ Process datablocks returned from read_bpch method for use

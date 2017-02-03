@@ -40,13 +40,14 @@ ND49_TITLE = "GEOS-CHEM DIAG49 instantaneous timeseries"
 class BPCHDataProxy(object):
     """A reference to the data payload of a single BPCH file datablock."""
 
-    # __slots__ = ('_shape', 'dtype', 'path', 'endian', 'file_positions',
-    #              'concat_axis', 'scale_factor', 'fill_value', 'maskandscale', 'memmap', '_data')
+    __slots__ = ('_shape', 'dtype', 'path', 'endian', 'file_positions',
+                 'concat_axis', 'scale_factor', 'fill_value', 'maskandscale',
+                 'memmap', 'use_dask', '_data')
 
     # TODO: Re-factor assuming "concat_axis" is just a prepend option
     def __init__(self, shape, dtype, path, endian, file_positions,
                  concat_axis, scale_factor, fill_value, maskandscale,
-                 memmap=True):
+                 memmap=True, use_dask=True):
         self._shape = shape
         self.dtype = dtype
         self.path = path
@@ -57,6 +58,7 @@ class BPCHDataProxy(object):
         self.scale_factor = scale_factor
         self.maskandscale = maskandscale
         self.memmap = memmap
+        self.use_dask = use_dask
         self._data = None
 
     @property
@@ -76,8 +78,10 @@ class BPCHDataProxy(object):
     def data(self):
         if self._data is None:
             if self.memmap:
+                print("LOAD (memmap)")
                 self._data = self.load_memmap()
             else:
+                print("LOAD")
                 self._data = self.load()
         return self._data
 
@@ -93,6 +97,24 @@ class BPCHDataProxy(object):
                 data = data.reshape(self._shape, order='F')
                 all_data.append(data)
             data = np.concatenate(all_data, axis=self.concat_axis)
+
+            #     if self.use_dask:
+            #         print("   DASK")
+            #         print(np.prod(self._shape),)
+            #         data = delayed(bpch_file.readline)('*f')
+            #         data = dsa.from_delayed(
+            #             data, shape=(np.prod(self._shape), ), dtype=self.dtype
+            #         )
+            #         data = dsa.reshape(data, self._shape, order='F')
+            #     else:
+            #         data = np.array(bpch_file.readline('*f'))
+            #         data = data.reshape(self._shape, order='F')
+            #     all_data.append(data)
+            #
+            # if self.use_dask:
+            #     data = dsa.concatenate(all_data, axis=self.concat_axis)
+            # else:
+            #     data = np.concatenate(all_data, axis=self.concat_axis)
 
         if self.maskandscale and (self.scale_factor is not None):
             data = data * self.scale_factor
@@ -110,26 +132,35 @@ class BPCHDataProxy(object):
         # all_data = np.empty(self.shape)
         all_data = []
         for i, pos in enumerate(self.file_positions):
-            data = delayed(np.memmap)(
-                self.path, mode='r',
-                dtype=np.dtype(self.endian+'f4'),
-                offset=pos+4, shape=self._shape, order='F'
-            )
-            all_data.append(dsa.from_delayed(data, self._shape, self.dtype))
-        all_data = dsa.concatenate(all_data)
+
+            if self.use_dask:
+                print("   DASK")
+                data = delayed(np.memmap)(
+                    self.path, mode='r',
+                    dtype=np.dtype(self.endian+'f4'),
+                    offset=pos+4, shape=self._shape, order='F'
+                )
+                data = dsa.from_delayed(data, self._shape, self.dtype)
+
+            else:
+                data = np.memmap(self.path, mode='r',
+                                 dtype=np.dtype(self.endian+'f4'),
+                                 offset=pos+4, shape=self._shape, order='F')
+            all_data.append(data)
+
+
+        if self.use_dask:
+            data = dsa.concatenate(all_data, axis=self.concat_axis)
+        else:
+            data = np.concatenate(all_data, axis=self.concat_axis)
 
         if self.maskandscale and (self.scale_factor is not None):
-            all_data = all_data * self.scale_factor
-        return all_data
-
-
-    def __getitem__(self, keys):
-
-        return self.data[keys]
-
+            data = data * self.scale_factor
         return data
 
 
+    def __getitem__(self, keys):
+        return self.data[keys]
 
     def __repr__(self):
         fmt = '<{self.__class__.__name__} shape={self.shape}' \
@@ -149,7 +180,7 @@ class BPCHDataProxy(object):
 def read_bpch(filename, mode='rb', skip_data=True,
               diaginfo_file='', tracerinfo_file='',
               dummy_prefix_dims=0, concat_blocks=False, first_header=False,
-              maskandscale=True,
+              maskandscale=True, memmap=True, use_dask=True,
               **kwargs):
     """
     Read the binary punch file v2 format.
@@ -289,7 +320,8 @@ def read_bpch(filename, mode='rb', skip_data=True,
                 else:
                     data = BPCHDataProxy(data_shape, np.dtype('f'),
                                          from_file, bpch_file.endian,
-                                         [file_position, ], concat_axis, diag['scale'], np.nan, maskandscale)
+                                         [file_position, ], concat_axis, diag['scale'], np.nan, maskandscale,
+                                         memmap=memmap, use_dask=use_dask)
             else:
                 # TODO: Converting the BPCHDataProxy to record multiple file
                 #       positions breaks the symmetry with load-on-read below,
