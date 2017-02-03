@@ -69,8 +69,8 @@ class BPCHDataProxyWrapper(NDArrayMixin):
         return self.array[key]
 
 
-
-def open_bpchdataset(filename, fields=[], fix_cf=True, fix_dims=False,
+def open_bpchdataset(filename, fields=[], categories=[],
+                     fix_cf=True, fix_dims=False,
                      tracerinfo_file='tracerinfo.dat',
                      diaginfo_file='diaginfo.dat',
                      endian=">", default_dtype=DEFAULT_DTYPE,
@@ -90,6 +90,9 @@ def open_bpchdataset(filename, fields=[], fix_cf=True, fix_dims=False,
         List of a subset of variable names to return. This can substantially
         improve read performance. Note that the field here is just the tracer
         name - not the category, e.g. 'O3' instead of 'IJ-AVG-$_O3'.
+    categories : list, optional
+        List a subset of variable categories to look through. This can
+        substantially improve read performance.
     fix_cf : logical, optional
         Conform units, standard names, and other metadata to CF standards when
         reading in data.
@@ -120,7 +123,8 @@ def open_bpchdataset(filename, fields=[], fix_cf=True, fix_dims=False,
     # bpch_contents = _get_bpch_contents(datablocks)
 
     store = _BPCHDataStore(
-        filename, fields=fields, fix_cf=fix_cf, fix_dims=fix_dims,
+        filename, fields=fields, categories=categories,
+        fix_cf=fix_cf, fix_dims=fix_dims,
         tracerinfo_file=tracerinfo_file,
         diaginfo_file=diaginfo_file, endian=endian,
         default_dtype=default_dtype, memmap=memmap, use_dask=use_dask
@@ -137,7 +141,8 @@ def open_bpchdataset(filename, fields=[], fix_cf=True, fix_dims=False,
 class _BPCHDataStore(xr.backends.common.AbstractDataStore):
     """ Backend for representing bpch binary output. """
 
-    def __init__(self, filename, fields=[], fix_cf=True, fix_dims=False,
+    def __init__(self, filename, fields=[], categories=[],
+                 fix_cf=True, fix_dims=False,
                  tracerinfo_file='', diaginfo_file='',
                  endian=">", default_dtype=DEFAULT_DTYPE,
                  memmap=True, use_dask=True):
@@ -216,7 +221,7 @@ class _BPCHDataStore(xr.backends.common.AbstractDataStore):
             dict(dims=['lev_edge', ], attrs={'axis': 'Z'})
         )
 
-        for vname, data, dims, attrs in self.load_from_datablocks(datablocks, fields):
+        for vname, data, dims, attrs in self.load_from_datablocks(datablocks, fields, categories):
 
             # If requested, try to coerce the attributes and metadata to
             # something a bit more CF-friendly
@@ -289,15 +294,17 @@ class _BPCHDataStore(xr.backends.common.AbstractDataStore):
         self._variables['nv'] = xr.Variable(['nv', ], [0, 1])
 
 
-    def load_from_datablocks(self, datablocks, fields=[]):
+    def load_from_datablocks(self, datablocks, fields=[], categories=[]):
         """ Process datablocks returned from read_bpch method for use
         in constructing xarray objects. """
 
         for datablock in datablocks:
-            name = datablock['name']
+            name = ctm2cf.get_valid_varname(datablock['name'])
+            category = ctm2cf.get_valid_varname(datablock['category'])
 
             if fields and (name not in fields): continue
-            vname = datablock['category'] + "_" + datablock['name']
+            if category and (category not in categories): continue
+            vname =  category + "_" + name
             # if not vname.endswith('O3'): continue
 
             # Record times for constructing coordinates later

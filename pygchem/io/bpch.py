@@ -182,6 +182,7 @@ class BPCHDataProxy(object):
             setattr(self, key, value)
 
 
+# TODO: Incremental read mode?
 def read_bpch(filename, mode='rb', skip_data=True,
               diaginfo_file='', tracerinfo_file='',
               dummy_prefix_dims=0, concat_blocks=False, first_header=False,
