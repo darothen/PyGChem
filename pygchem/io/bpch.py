@@ -148,7 +148,7 @@ class BPCHDataProxyConcatDim(object):
     def data(self):
         if self._data is None:
             if self.memmap:
-                print("LOAD (memmap)")
+                # print("LOAD (memmap)")
                 self._data = self.load_memmap()
             else:
                 # print("LOAD")
@@ -234,8 +234,6 @@ class BPCHDataProxyConcatDim(object):
         if self.maskandscale and (self.scale_factor is not None):
             data = data * self.scale_factor
 
-
-        print(type(data))
         return data
 
 

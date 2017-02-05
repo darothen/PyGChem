@@ -90,11 +90,13 @@ class BPCHDataProxyWrapper(NDArrayMixin):
 
     @property
     def array(self):
-        return self._array.data
+        data = self._array.data
+        print(type(data))
+        return data
 
     @property
     def dtype(self):
-        return self.array.dtype
+        return self._array.dtype
 
     def __getitem__(self, key):
         print(key)
