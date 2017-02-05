@@ -453,7 +453,7 @@ class _BPCHDataStore_old(xr.backends.common.AbstractDataStore):
             dict(dims=['lev_edge', ], attrs={'axis': 'Z'})
         )
 
-        for vname, data, dims, attrs in self.load_from_datablocks(datablocks, fields, categories):
+        for vname, data, dims, attrs in self._load_from_datablocks(datablocks, fields, categories):
 
             # If requested, try to coerce the attributes and metadata to
             # something a bit more CF-friendly
@@ -526,7 +526,7 @@ class _BPCHDataStore_old(xr.backends.common.AbstractDataStore):
         self._variables['nv'] = xr.Variable(['nv', ], [0, 1])
 
 
-    def load_from_datablocks(self, datablocks, fields=[], categories=[]):
+    def _load_from_datablocks(self, datablocks, fields=[], categories=[]):
         """ Process datablocks returned from read_bpch method for use
         in constructing xarray objects. """
 

@@ -148,7 +148,7 @@ class BPCHDataProxyConcatDim(object):
     def data(self):
         if self._data is None:
             if self.memmap:
-                # print("LOAD (memmap)")
+                print("LOAD (memmap)")
                 self._data = self.load_memmap()
             else:
                 # print("LOAD")
@@ -231,7 +231,13 @@ class BPCHDataProxyConcatDim(object):
             # to squeeze the leading dimension
             data = all_data[0][0]
 
-        return self._maybe_maskandscale(data)
+        if self.maskandscale and (self.scale_factor is not None):
+            data = data * self.scale_factor
+
+
+        print(type(data))
+        return data
+
 
 
     def __getitem__(self, keys):
