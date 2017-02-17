@@ -285,6 +285,10 @@ class bpch_variable(BPCHDataProxy):
         arr = np.concatenate(self._data_pieces, axis=0).view(self.dtype)
         return self._maybe_mask_and_scale(arr)
 
+    @property
+    def attributes(self):
+        return self._attributes
+
     def __setattr__(self, key, value):
         try:
             self._attribute[key] = value
@@ -432,7 +436,7 @@ class bpch_file(object):
         line = self.fp.readline('20sffii')
         modelname, res0, res1, halfpolar, center180 = line
         self._attributes.update({
-            "modelname": modelname,
+            "modelname":str(modelname, 'utf-8').strip(),
             "halfpolar": halfpolar,
             "center180": center180,
             "res": (res0, res1)
@@ -451,6 +455,8 @@ class bpch_file(object):
         var_bundles = OrderedDict()
         var_attrs = OrderedDict()
         _times = []
+
+        n_vars = 0
 
         while self.fp.tell() < self.fsize:
 
@@ -509,12 +515,11 @@ class bpch_file(object):
             if self.use_mmap:
                 dtype = np.dtype(self.endian + 'f4')
                 offset = pos + 4
-
                 data = np.memmap(self.filename, mode='r',
-                                 shape=np.product(data_shape),
+                                 shape=data_shape,
                                  dtype=dtype, offset=offset, order='F')
                 # print(len(data), data_shape, np.product(data_shape))
-                data.shape = data_shape
+                # data.shape = data_shape
                 self.fp.skipline()
             else:
                 self.fp.seek(pos)
@@ -527,13 +532,14 @@ class bpch_file(object):
             else:
                 var_bundles[fullname] = [data, ]
                 var_attrs[fullname] = var_attr
+                n_vars += 1
 
             timelo, timehi = timeutil.tau2time(tau0), timeutil.tau2time(tau1)
             _times.append((timelo, timehi))
 
         # Copy over the data we've recorded
-        self.time_bnds[:] = _times
-        self.times = [t[0] for t in _times]
+        self.time_bnds[:] = _times[::n_vars]
+        self.times = [t[0] for t in _times[::n_vars]]
 
         for fullname, bundle in var_bundles.items():
             var_attr = var_attrs[fullname]
@@ -542,7 +548,6 @@ class bpch_file(object):
                 file_position=None, scale_factor=var_attr['scale'],
                 fill_value=np.nan, maskandscale=False, attributes=var_attr
             )
-
 
 # TODO: Incremental read mode?
 def read_bpch(filename, mode='rb', skip_data=True,
