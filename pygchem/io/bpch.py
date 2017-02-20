@@ -85,6 +85,11 @@ class BPCHDataProxy(object):
                 self._data = self.load()
         return self._data
 
+    def _maybe_maskandscale(self, arr):
+        if self.maskandscale and (self.scale_factor is not None):
+            return arr * self.scale_factor
+        return arr
+
     def array(self):
         return self.data
 
@@ -116,9 +121,7 @@ class BPCHDataProxy(object):
             # else:
             #     data = np.concatenate(all_data, axis=self.concat_axis)
 
-        if self.maskandscale and (self.scale_factor is not None):
-            data = data * self.scale_factor
-        return data
+        return self._maybe_maskandscale(data)
 
 
     def load_memmap(self):
@@ -128,7 +131,7 @@ class BPCHDataProxy(object):
               prefix that that the Fortran write statement prepends to an
               output line.
         """
-        # print("LOAD_MEMMAP", self.shape)
+        print("LOAD_MEMMAP", self.shape)
         # all_data = np.empty(self.shape)
         all_data = []
         for i, pos in enumerate(self.file_positions):
@@ -158,10 +161,7 @@ class BPCHDataProxy(object):
             # to squeeze the leading dimension
             data = all_data[0][0]
 
-        if self.maskandscale and (self.scale_factor is not None):
-            data = data * self.scale_factor
-
-        return data
+        return self._maybe_maskandscale(data)
 
 
     def __getitem__(self, keys):

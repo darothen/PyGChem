@@ -64,6 +64,7 @@ class BPCHDataProxyWrapper(NDArrayMixin):
         return self.array.dtype
 
     def __getitem__(self, key):
+        print(key)
         if key == () and self.ndim == 0:
             return self.array.get_value()
         return self.array[key]
@@ -74,7 +75,7 @@ def open_bpchdataset(filename, fields=[], categories=[],
                      tracerinfo_file='tracerinfo.dat',
                      diaginfo_file='diaginfo.dat',
                      endian=">", default_dtype=DEFAULT_DTYPE,
-                     memmap=True, use_dask=True):
+                     memmap=True, use_dask=True, return_store=False):
     """ Open a GEOS-Chem BPCH file output as an xarray Dataset.
 
     Parameters
@@ -138,8 +139,10 @@ def open_bpchdataset(filename, fields=[], categories=[],
 
     # To immediately load the data from the BPCHDataProxy paylods, need
     # to execute ds.data_vars for some reason...
-
-    return ds
+    if return_store:
+        return ds, store
+    else:
+        return ds
 
 
 class _BPCHDataStore(xr.backends.common.AbstractDataStore):
@@ -237,7 +240,7 @@ class _BPCHDataStore(xr.backends.common.AbstractDataStore):
 
             # data = data.load_memmap()
             # TODO: Explore using a wrapper with an NDArrayMixin; if you don't do this, then dask won't work correctly (it won't promote the data to an array from a BPCHDataProxy). I'm not sure why.
-            data = BPCHDataProxyWrapper(data)
+            data = indexing.LazilyIndexedArray(BPCHDataProxyWrapper(data))
             var = xr.Variable(dims, data, attrs)
 
             # Shuffle dims for CF/COARDS compliance if requested
@@ -307,7 +310,7 @@ class _BPCHDataStore(xr.backends.common.AbstractDataStore):
             category = ctm2cf.get_valid_varname(datablock['category'])
 
             if fields and (name not in fields): continue
-            if category and (category not in categories): continue
+            if categories and (category not in categories): continue
             vname =  category + "_" + name
             # if not vname.endswith('O3'): continue
 
@@ -356,7 +359,7 @@ class _BPCHDataStore(xr.backends.common.AbstractDataStore):
             )
             data = datablock['data']
 
-            print(vname, dims, data.shape)
+            # print(vname, dims, data.shape)
 
             yield vname, data, dims, attrs
 
