@@ -20,7 +20,10 @@ standard_library.install_aliases()
 from builtins import *
 from past.utils import old_div
 from builtins import object
+from collections import OrderedDict
+import mmap as mm
 import os
+import warnings
 
 import numpy as np
 from dask import delayed
@@ -38,6 +41,73 @@ ND49_TITLE = "GEOS-CHEM DIAG49 instantaneous timeseries"
 
 
 class BPCHDataProxy(object):
+    """A reference to the data payload of a single BPCH file datablock."""
+
+    # __slots__ = ('_shape', 'dtype', 'path', 'endian', 'file_position',
+    #              'scale_factor', 'fill_value', 'maskandscale', '_data')
+
+    def __init__(self, shape, dtype, path, endian, file_position,
+                 scale_factor, fill_value, maskandscale):
+        self._shape = shape
+        self.dtype = dtype
+        self.path = path
+        self.fill_value = fill_value
+        self.endian = endian
+        self.file_position = file_position
+        self.scale_factor = scale_factor
+        self.maskandscale = maskandscale
+        self._data = None
+
+    def _maybe_mask_and_scale(self, arr):
+        if self.maskandscale and (self.scale_factor is not None):
+            arr = self.scale_factor * arr
+        return arr
+
+    @property
+    def shape(self):
+        return self._shape
+
+    @property
+    def ndim(self):
+        return len(self.shape)
+
+    @property
+    def data(self):
+        if self._data is None:
+            self._data = self.load()
+        return self._data
+
+    def array(self):
+        return self.data
+
+    def load(self):
+        with uff.FortranFile(self.path, 'rb', self.endian) as bpch_file:
+            pos = self.file_position
+            bpch_file.seek(pos)
+            data = np.array(bpch_file.readline('*f'))
+            data = data.reshape(self._shape, order='F')
+        if self.maskandscale and (self.scale_factor is not None):
+            data = data * self.scale_factor
+        return data
+
+    def __getitem__(self, keys):
+        return self.data[keys]
+
+    def __repr__(self):
+        fmt = '<{self.__class__.__name__} shape={self.shape}' \
+              ' dtype={self.dtype!r} path={self.path!r}' \
+              ' file_position={self.file_position}' \
+              ' scale_factor={self.scale_factor}>'
+        return fmt.format(self=self)
+
+    def __getstate__(self):
+        return {attr: getattr(self, attr) for attr in self.__slots__}
+
+    def __setstate__(self, state):
+        for key, value in list(state.items()):
+            setattr(self, key, value)
+
+class BPCHDataProxyConcatDim(object):
     """A reference to the data payload of a single BPCH file datablock."""
 
     __slots__ = ('_shape', 'dtype', 'path', 'endian', 'file_positions',
@@ -182,6 +252,303 @@ class BPCHDataProxy(object):
             setattr(self, key, value)
 
 
+class bpch_variable(BPCHDataProxy):
+
+    def __init__(self, data_pieces, *args, attributes=None,
+                 **kwargs):
+        self._data_pieces = data_pieces
+        super(bpch_variable, self).__init__(*args, **kwargs)
+
+        if attributes is not None:
+            self._attributes = attributes
+        else:
+            self._attributes = OrderedDict()
+        for k, v in self._attributes.items():
+            self.__dict__[k] = v
+
+    def load(self):
+        warnings.warn("'load' disabled on bpch_variable.")
+        pass
+
+    @property
+    def shape(self):
+        shape_copy = list(self._shape)
+        shape_copy[0] = len(self._data_pieces)
+        return tuple(shape_copy)
+
+    @property
+    def chunks(self):
+        return len(self._data_pieces)
+
+    @property
+    def data(self):
+        arr = np.concatenate(self._data_pieces, axis=0).view(self.dtype)
+        return self._maybe_mask_and_scale(arr)
+
+    @property
+    def attributes(self):
+        return self._attributes
+
+    def __setattr__(self, key, value):
+        try:
+            self._attribute[key] = value
+        except AttributeError:
+            pass
+        self.__dict__[key] = value
+
+    def __str__(self):
+        pass
+
+    def __repr__(self):
+        return """
+          <{self.__class__.__name__}
+          shape={self.shape} (chunks={self.chunks})
+           dtype={self.dtype!r} scale_factor={self.scale_factor}>
+        """.format(self=self)
+
+    def __getitem__(self, index):
+        if self.chunks == 1:
+            arr = self._data_pieces[0][index]
+        else:
+            pass
+
+        return self._maybe_mask_and_scale(arr)
+
+class bpch_file(object):
+    """ A file object for BPCH data on disk.
+
+    Parameters
+    ----------
+
+    Notes
+    -----
+
+    Examples
+    --------
+
+    """
+
+    def __init__(self, filename, mode='rb', endian='>', memmap=False,
+                 diaginfo_file='', tracerinfo_file='',
+                 maskandscale=False):
+        """ Initialize a bpch_file. """
+
+        self.mode = mode
+        if not mode.startswith('r'):
+            raise ValueError("Currently only know how to 'r(b)'ead bpch files.")
+
+        self.filename = filename
+        self.fsize = os.path.getsize(self.filename)
+        self.use_mmap = memmap
+        self.endian = endian
+
+        # Open a pointer to the file
+        self.fp = uff.FortranFile(self.filename, self.mode, self.endian)
+
+        # self._mm = None
+        # self._mm_buf = None
+        # if self.use_mmap:
+        #     self._mm = mm.mmap(self.fp.fileno(), 0, access=mm.ACCESS_READ)
+        #     self._mm_buf = np.frombuffer(self._mm, dtype=np.int8)
+
+        dir_path = os.path.abspath(os.path.dirname(filename))
+        if not dir_path:
+            dir_path = os.getcwd()
+        if not tracerinfo_file:
+            tracerinfo_file = os.path.join(dir_path, "tracerinfo.dat")
+            if not os.path.exists(tracerinfo_file):
+                tracerinfo_file = ''
+        self.tracerinfo_file = tracerinfo_file
+        if not diaginfo_file:
+            diaginfo_file = os.path.join(dir_path, "diaginfo.dat")
+            if not os.path.exists(diaginfo_file):
+                diaginfo_file = ''
+        self.diaginfo_file = diaginfo_file
+        self.ctm_info = CTMDiagnosticInfo(diaginfo_file=self.diaginfo_file,
+                                          tracerinfo_file=self.tracerinfo_file)
+
+        # self.dimensions = OrderedDict()
+        self.variables = OrderedDict()
+        self.times = []
+        self.time_bnds = []
+
+        self._attributes = OrderedDict()
+
+        # Critical information for accessing file contents
+        self.maskandscale = maskandscale
+        self._header_pos = None
+
+        if mode.startswith('r'):
+            self._read()
+
+
+    def close(self):
+        """ Close this bpch file. """
+        import weakref
+        import warnings
+
+        if not self.fp.closed:
+            self.variables = OrderedDict()
+
+            # if self._mm_buf is not None:
+            #     ref = weakref.ref(self._mm_buf)
+            #     self._mm_buf = None
+            #     if ref() is None:
+            #         self._mm.close()
+            #     else:
+            #         warnings.warn(
+            #             "Can't close bpch_file opened with memory mapping until "
+            #             "all of variables/arrays referencing its data are "
+            #             "copied and/or cleaned", category=RuntimeWarning)
+            # self._mm = None
+            self.fp.close()
+    # __del__ = close
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, type, value, traceback):
+        self.close()
+
+    def _read(self):
+        """ Parse the file on disk and set up easy access to meta-
+        and data blocks """
+
+        self._read_metadata()
+        self._read_header()
+        self._read_var_data()
+
+
+    def _read_metadata(self):
+        """ Read the main metadata packaged within a bpch file """
+
+        filetype = self.fp.readline().strip()
+        filetitle = self.fp.readline().strip()
+
+        self.__setattr__('filetype', filetype)
+        self.__setattr__('filetitle', filetitle)
+
+
+    def _read_header(self, all_info=False):
+
+        self._header_pos = self.fp.tell()
+
+        line = self.fp.readline('20sffii')
+        modelname, res0, res1, halfpolar, center180 = line
+        self._attributes.update({
+            "modelname":str(modelname, 'utf-8').strip(),
+            "halfpolar": halfpolar,
+            "center180": center180,
+            "res": (res0, res1)
+        })
+        self.__setattr__('modelname', modelname)
+        self.__setattr__('res', (res0, res1))
+        self.__setattr__('halfpolar', halfpolar)
+        self.__setattr__('center180', center180)
+
+        # Re-wind the file
+        self.fp.seek(self._header_pos)
+
+
+    def _read_var_data(self):
+
+        var_bundles = OrderedDict()
+        var_attrs = OrderedDict()
+        _times = []
+
+        n_vars = 0
+
+        while self.fp.tell() < self.fsize:
+
+            var_attr = OrderedDict()
+
+            # read first and second header lines
+            line = self.fp.readline('20sffii')
+            modelname, res0, res1, halfpolar, center180 = line
+
+            line = self.fp.readline('40si40sdd40s7i')
+            category_name, number, unit, tau0, tau1, reserved = line[:6]
+            dim0, dim1, dim2, dim3, dim4, dim5, skip = line[6:]
+            var_attr['number'] = number
+
+            # Decode byte-strings to utf-8
+            category_name = str(category_name, 'utf-8')
+            var_attr['category'] = category_name.strip()
+            unit = str(unit, 'utf-8')
+
+            # get additional metadata from tracerinfo / diaginfo
+            try:
+                cat = self.ctm_info.categories.select_item(
+                    category_name.strip())
+                cat_attr = cat.to_dict()
+                diag = self.ctm_info.diagnostics.select_item(
+                    cat.offset + int(number)
+                )
+                diag_attr = diag.to_dict()
+                if not unit.strip():  # unit may be empty in bpch
+                    unit = diag_attr['unit']  # but not in tracerinfo
+                var_attr.update(diag_attr)
+            except exceptions.SelectionMismatchError:
+                diag = {'name': '', 'scale': 1}
+                var_attr.update(diag)
+                diag_attr = {}
+                cat_attr = {}
+            var_attr['unit'] = unit
+
+            vname = diag['name']
+            fullname = category_name.strip() + "_" + vname
+            # print(fullname)
+
+            # parse metadata, get data or set a data proxy
+            if dim2 == 1:
+                data_shape = (dim0, dim1)         # 2D field
+            else:
+                data_shape = (dim0, dim1, dim2)
+            # Add proxy time dimension to shape
+            data_shape = tuple([1, ] + list(data_shape))
+            origin = (dim3, dim4, dim5)
+            var_attr['origin'] = origin
+
+            pos = self.fp.tell()
+
+            # Map or read the data
+            if self.use_mmap:
+                dtype = np.dtype(self.endian + 'f4')
+                offset = pos + 4
+                data = np.memmap(self.filename, mode='r',
+                                 shape=data_shape,
+                                 dtype=dtype, offset=offset, order='F')
+                # print(len(data), data_shape, np.product(data_shape))
+                # data.shape = data_shape
+                self.fp.skipline()
+            else:
+                self.fp.seek(pos)
+                data = np.array(self.fp.readline('*f'))
+                # data = data.reshape(data_shape, order='F')
+                data.shape = data_shape
+            # Save the data as a "bundle" for concatenating in the final step
+            if fullname in var_bundles:
+                var_bundles[fullname].append(data)
+            else:
+                var_bundles[fullname] = [data, ]
+                var_attrs[fullname] = var_attr
+                n_vars += 1
+
+            timelo, timehi = timeutil.tau2time(tau0), timeutil.tau2time(tau1)
+            _times.append((timelo, timehi))
+
+        # Copy over the data we've recorded
+        self.time_bnds[:] = _times[::n_vars]
+        self.times = [t[0] for t in _times[::n_vars]]
+
+        for fullname, bundle in var_bundles.items():
+            var_attr = var_attrs[fullname]
+            self.variables[fullname] = bpch_variable(
+                bundle, data_shape, np.dtype('f'), self.filename, self.endian,
+                file_position=None, scale_factor=var_attr['scale'],
+                fill_value=np.nan, maskandscale=False, attributes=var_attr
+            )
+
 # TODO: Incremental read mode?
 def read_bpch(filename, mode='rb', skip_data=True,
               diaginfo_file='', tracerinfo_file='',
@@ -324,10 +691,12 @@ def read_bpch(filename, mode='rb', skip_data=True,
                     )
                     continue
                 else:
-                    data = BPCHDataProxy(data_shape, np.dtype('f'),
-                                         from_file, bpch_file.endian,
-                                         [file_position, ], concat_axis, diag['scale'], np.nan, maskandscale,
-                                         memmap=memmap, use_dask=use_dask)
+                    data = BPCHDataProxyConcatDim(
+                        data_shape, np.dtype('f'),
+                        from_file, bpch_file.endian,
+                        [file_position, ], concat_axis, diag['scale'], np.nan, maskandscale,
+                        memmap=memmap, use_dask=use_dask
+                    )
             else:
                 # TODO: Converting the BPCHDataProxy to record multiple file
                 #       positions breaks the symmetry with load-on-read below,
@@ -457,3 +826,6 @@ def write_bpch(filename, datablocks, title=DEFAULT_TITLE,
     with create_bpch(filename, title, filetype, **kwargs) as bpch_file:
         for db in datablocks:
             append_bpch(bpch_file, db)
+
+
+BPCHFile = bpch_file
